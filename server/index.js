@@ -92,14 +92,72 @@ async function createOrUpdateTemplate(filename) {
   }
 }
 
+// Function to create or update README.md
+async function createOrUpdateReadme() {
+  try {
+    let currentSha = null;
+    let needsUpdate = true;
+
+    const readmeContent = await readTemplate('README.md');
+
+    // Check if README.md exists
+    try {
+      const response = await octokit.rest.repos.getContent({
+        owner: process.env.GITHUB_OWNER,
+        repo: process.env.GITHUB_REPO,
+        path: 'README.md'
+      });
+
+      // Compare content if file exists
+      const currentContent = Buffer.from(response.data.content, 'base64').toString();
+      if (currentContent === readmeContent) {
+        console.log('README.md is up to date');
+        needsUpdate = false;
+      } else {
+        console.log('README.md needs update');
+        currentSha = response.data.sha;
+      }
+    } catch (error) {
+      if (error.status === 404) {
+        console.log('README.md does not exist. Creating new file.');
+      } else {
+        throw error;
+      }
+    }
+
+    // Create or update file if needed
+    if (needsUpdate) {
+      await octokit.rest.repos.createOrUpdateFileContents({
+        owner: process.env.GITHUB_OWNER,
+        repo: process.env.GITHUB_REPO,
+        path: 'README.md',
+        message: currentSha ? 'Update README.md' : 'Create README.md',
+        content: Buffer.from(readmeContent).toString('base64'),
+        branch: 'main',
+        ...(currentSha && { sha: currentSha })
+      });
+      console.log(currentSha ? 'README.md has been updated' : 'README.md has been created');
+    }
+  } catch (error) {
+    console.error('Error checking/creating/updating README.md:', error);
+  }
+}
+
 // Check and create/update template files on server start
 async function initializeTemplates() {
   await createOrUpdateTemplate('index.html');
   await createOrUpdateTemplate('post.html');
 }
 
-// Initialize templates on server start
-initializeTemplates();
+// Initialize templates and README on server start
+async function initializeFiles() {
+  await createOrUpdateTemplate('index.html');
+  await createOrUpdateTemplate('post.html');
+  await createOrUpdateReadme();
+}
+
+// Initialize files on server start
+initializeFiles();
 
 // Function to update meta.json
 async function updateMetaJson(newPostFile) {
