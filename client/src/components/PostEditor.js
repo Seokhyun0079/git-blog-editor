@@ -45,18 +45,22 @@ const PostEditor = ({ onPostCreated }) => {
         formData.append('files', file);
       });
 
-      await axios.post('http://localhost:5000/api/posts', formData, {
+      const response = await axios.post('http://localhost:5000/api/posts', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
 
-      setTitle('');
-      setContent('');
-      setFiles([]);
-      onPostCreated();
+      if (response.data.success) {
+        setTitle('');
+        setContent('');
+        setFiles([]);
+        onPostCreated();
+      } else {
+        throw new Error(response.data.error || 'An error occurred while creating the post.');
+      }
     } catch (error) {
-      setError('포스트 작성 중 오류가 발생했습니다.');
+      setError(error.response?.data?.error || error.message || 'An error occurred while creating the post.');
       console.error('Error creating post:', error);
     } finally {
       setLoading(false);
@@ -66,13 +70,13 @@ const PostEditor = ({ onPostCreated }) => {
   return (
     <Paper elevation={3} sx={{ p: 3 }}>
       <Typography variant="h5" component="h2" gutterBottom>
-        새 글 작성
+        Create New Post
       </Typography>
 
       <form onSubmit={handleSubmit}>
         <TextField
           fullWidth
-          label="제목"
+          label="Title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           margin="normal"
@@ -81,7 +85,7 @@ const PostEditor = ({ onPostCreated }) => {
 
         <TextField
           fullWidth
-          label="내용"
+          label="Content"
           value={content}
           onChange={(e) => setContent(e.target.value)}
           margin="normal"
@@ -105,7 +109,7 @@ const PostEditor = ({ onPostCreated }) => {
               component="span"
               startIcon={<CloudUploadIcon />}
             >
-              파일 첨부
+              Attach Files
             </Button>
           </label>
         </Box>
@@ -146,7 +150,7 @@ const PostEditor = ({ onPostCreated }) => {
             disabled={loading || !title || !content}
             startIcon={loading ? <CircularProgress size={20} /> : null}
           >
-            {loading ? '저장 중...' : '저장하기'}
+            {loading ? 'Saving...' : 'Save'}
           </Button>
         </Box>
       </form>

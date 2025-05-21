@@ -15,23 +15,135 @@ console.log('GITHUB_TOKEN:', process.env.GITHUB_TOKEN ? 'Set' : 'Not set');
 console.log('==========================');
 
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+
+// Configure multer for memory storage
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
 app.use(cors());
 app.use(express.json());
+
+// Serve static files
+app.use(express.static(path.join(__dirname, '..')));
 
 // Create Octokit instance for GitHub authentication
 const octokit = new Octokit({
   auth: process.env.GITHUB_TOKEN
 });
 
-// Function to read index.html template
-async function readIndexTemplate() {
+// Function to read template files
+async function readTemplate(filename) {
   try {
-    const templatePath = path.join(__dirname, 'templates', 'index.html');
+    const templatePath = path.join(__dirname, 'templates', filename);
     return await fs.readFile(templatePath, 'utf8');
   } catch (error) {
-    console.error('Error reading index.html template:', error);
+    console.error(`Error reading ${filename} template:`, error);
+    throw error;
+  }
+}
+
+// Function to create or update template file
+async function createOrUpdateTemplate(filename) {
+  try {
+    let currentSha = null;
+    let needsUpdate = true;
+    const templateContent = await readTemplate(filename);
+
+    // Check if file exists
+    try {
+      const response = await octokit.rest.repos.getContent({
+        owner: process.env.GITHUB_OWNER,
+        repo: process.env.GITHUB_REPO,
+        path: filename
+      });
+
+      // Compare content if file exists
+      const currentContent = Buffer.from(response.data.content, 'base64').toString();
+      if (currentContent === templateContent) {
+        console.log(`${filename} is up to date`);
+        needsUpdate = false;
+      } else {
+        console.log(`${filename} needs update`);
+        currentSha = response.data.sha;
+      }
+    } catch (error) {
+      if (error.status === 404) {
+        console.log(`${filename} does not exist. Creating new file.`);
+      } else {
+        throw error;
+      }
+    }
+
+    // Create or update file if needed
+    if (needsUpdate) {
+      await octokit.rest.repos.createOrUpdateFileContents({
+        owner: process.env.GITHUB_OWNER,
+        repo: process.env.GITHUB_REPO,
+        path: filename,
+        message: currentSha ? `Update ${filename}` : `Create ${filename}`,
+        content: Buffer.from(templateContent).toString('base64'),
+        branch: 'main',
+        ...(currentSha && { sha: currentSha })
+      });
+      console.log(currentSha ? `${filename} has been updated` : `${filename} has been created`);
+    }
+  } catch (error) {
+    console.error(`Error checking/creating/updating ${filename}:`, error);
+  }
+}
+
+// Check and create/update template files on server start
+async function initializeTemplates() {
+  await createOrUpdateTemplate('index.html');
+  await createOrUpdateTemplate('post.html');
+}
+
+// Initialize templates on server start
+initializeTemplates();
+
+// Function to update meta.json
+async function updateMetaJson(newPostFile) {
+  try {
+    let metaContent;
+    let currentSha = null;
+
+    // Try to get existing meta.json
+    try {
+      const response = await octokit.rest.repos.getContent({
+        owner: process.env.GITHUB_OWNER,
+        repo: process.env.GITHUB_REPO,
+        path: 'posts/meta.json'
+      });
+      metaContent = JSON.parse(Buffer.from(response.data.content, 'base64').toString());
+      currentSha = response.data.sha;
+    } catch (error) {
+      if (error.status === 404) {
+        // Create new meta.json if it doesn't exist
+        metaContent = { posts: [] };
+      } else {
+        throw error;
+      }
+    }
+
+    // Add new post file to the list if it's not already there
+    if (!metaContent.posts.includes(newPostFile)) {
+      metaContent.posts.push(newPostFile);
+    }
+
+    // Update meta.json
+    await octokit.rest.repos.createOrUpdateFileContents({
+      owner: process.env.GITHUB_OWNER,
+      repo: process.env.GITHUB_REPO,
+      path: 'posts/meta.json',
+      message: 'Update meta.json',
+      content: Buffer.from(JSON.stringify(metaContent, null, 2)).toString('base64'),
+      branch: 'main',
+      ...(currentSha && { sha: currentSha })
+    });
+
+    console.log('meta.json has been updated');
+  } catch (error) {
+    console.error('Error updating meta.json:', error);
     throw error;
   }
 }
@@ -41,7 +153,7 @@ async function createOrUpdateIndexHtml() {
   try {
     let currentSha = null;
     let needsUpdate = true;
-    const templateContent = await readIndexTemplate();
+    const templateContent = await readTemplate('index.html');
 
     // Check if index.html exists
     try {
@@ -89,34 +201,86 @@ async function createOrUpdateIndexHtml() {
 // Check and create/update index.html on server start
 createOrUpdateIndexHtml();
 
+// Upload images endpoint
+app.post('/api/upload', upload.array('images'), async (req, res) => {
+  try {
+    const files = req.files;
+    const uploadedFiles = [];
+
+    for (const file of files) {
+      const imagePath = `images/${file.originalname}`;
+
+      // Upload image to GitHub
+      const response = await octokit.rest.repos.createOrUpdateFileContents({
+        owner: process.env.GITHUB_OWNER,
+        repo: process.env.GITHUB_REPO,
+        path: imagePath,
+        message: `Upload image: ${file.originalname}`,
+        content: file.buffer.toString('base64'),
+        branch: 'main'
+      });
+
+      uploadedFiles.push({
+        name: file.originalname,
+        url: response.data.content.html_url
+      });
+    }
+
+    res.json({ success: true, files: uploadedFiles });
+  } catch (error) {
+    console.error('Error uploading images:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Create blog post endpoint
 app.post('/api/posts', upload.array('files'), async (req, res) => {
   try {
     const { title, content } = req.body;
-    const files = req.files;
+    const files = req.files || [];
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `${timestamp}.json`;
 
-    // Convert post data to JSON
+    // Upload files to GitHub
+    const uploadedFiles = [];
+    for (const file of files) {
+      const imagePath = `images/${file.originalname}`;
+      await octokit.rest.repos.createOrUpdateFileContents({
+        owner: process.env.GITHUB_OWNER,
+        repo: process.env.GITHUB_REPO,
+        path: imagePath,
+        message: `Upload image: ${file.originalname}`,
+        content: file.buffer.toString('base64'),
+        branch: 'main'
+      });
+      uploadedFiles.push({
+        name: file.originalname,
+        url: `https://raw.githubusercontent.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/main/${imagePath}`
+      });
+    }
+
+    // Create post data
     const postData = {
       title,
       content,
       createdAt: new Date().toISOString(),
-      files: files ? files.map(file => ({
-        name: file.originalname,
-        path: file.path
-      })) : []
+      files: uploadedFiles
     };
 
-    // Commit file to GitHub
-    const response = await octokit.rest.repos.createOrUpdateFileContents({
+    // Create post file
+    await octokit.rest.repos.createOrUpdateFileContents({
       owner: process.env.GITHUB_OWNER,
       repo: process.env.GITHUB_REPO,
-      path: `posts/${Date.now()}.json`,
-      message: `Add new blog post: ${title}`,
+      path: `posts/${filename}`,
+      message: `Create post: ${title}`,
       content: Buffer.from(JSON.stringify(postData, null, 2)).toString('base64'),
       branch: 'main'
     });
 
-    res.json({ success: true, data: response.data });
+    // Update meta.json
+    await updateMetaJson(filename);
+
+    res.json({ success: true, filename });
   } catch (error) {
     console.error('Error creating post:', error);
     res.status(500).json({ success: false, error: error.message });

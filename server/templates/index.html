@@ -19,6 +19,12 @@
         padding: 20px;
         border: 1px solid #e1e4e8;
         border-radius: 6px;
+        text-decoration: none;
+        color: inherit;
+        display: block;
+      }
+      .post:hover {
+        background-color: #f6f8fa;
       }
       .post-title {
         margin-top: 0;
@@ -30,6 +36,16 @@
       }
       .post-content {
         margin-top: 20px;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .post-preview-image {
+        max-width: 100%;
+        max-height: 200px;
+        margin-top: 10px;
+        border-radius: 4px;
       }
     </style>
   </head>
@@ -40,22 +56,40 @@
       // Function to fetch and display posts
       async function loadPosts() {
         try {
-          const response = await fetch("/api/posts");
-          const data = await response.json();
+          // Fetch meta.json to get list of posts
+          const metaResponse = await fetch("./posts/meta.json");
+          const meta = await metaResponse.json();
+
           const postsContainer = document.getElementById("posts");
 
-          data.data.forEach((post) => {
-            const postElement = document.createElement("div");
-            postElement.className = "post";
-            postElement.innerHTML = `
-                        <h2 class="post-title">${post.title}</h2>
-                        <div class="post-date">${new Date(
-                          post.createdAt
-                        ).toLocaleDateString()}</div>
-                        <div class="post-content">${post.content}</div>
-                    `;
-            postsContainer.appendChild(postElement);
-          });
+          // Load each post file
+          for (const postFile of meta.posts) {
+            try {
+              const postResponse = await fetch(`./posts/${postFile}`);
+              const post = await postResponse.json();
+
+              const postElement = document.createElement("a");
+              postElement.className = "post";
+              postElement.href = `./post.html?id=${postFile}`;
+
+              let previewImage = "";
+              if (post.files && post.files.length > 0) {
+                previewImage = `<img src="/images/${post.files[0].name}" alt="Preview" class="post-preview-image">`;
+              }
+
+              postElement.innerHTML = `
+                <h2 class="post-title">${post.title}</h2>
+                <div class="post-date">${new Date(
+                  post.createdAt
+                ).toLocaleDateString()}</div>
+                <div class="post-content">${post.content}</div>
+                ${previewImage}
+              `;
+              postsContainer.appendChild(postElement);
+            } catch (error) {
+              console.error(`Error loading post ${postFile}:`, error);
+            }
+          }
         } catch (error) {
           console.error("Error loading posts:", error);
         }
