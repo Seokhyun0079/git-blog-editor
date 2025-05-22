@@ -5,64 +5,159 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GitHub Blog</title>
     <style>
+      :root {
+        --primary-color: #2d3436;
+        --secondary-color: #636e72;
+        --accent-color: #0984e3;
+        --background-color: #f5f6fa;
+        --card-background: #ffffff;
+      }
+
       body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
           Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
         line-height: 1.6;
         margin: 0;
-        padding: 20px;
-        max-width: 800px;
-        margin: 0 auto;
+        padding: 0;
+        background-color: var(--background-color);
+        color: var(--primary-color);
       }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem;
+      }
+
+      header {
+        text-align: center;
+        padding: 3rem 0;
+        background: linear-gradient(135deg, var(--accent-color), #74b9ff);
+        color: white;
+        margin-bottom: 3rem;
+      }
+
+      h1 {
+        font-size: 2.5rem;
+        margin: 0;
+        font-weight: 700;
+      }
+
+      .posts-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 2rem;
+        padding: 1rem;
+      }
+
       .post {
-        margin-bottom: 40px;
-        padding: 20px;
-        border: 1px solid #e1e4e8;
-        border-radius: 6px;
+        background: var(--card-background);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
         text-decoration: none;
         color: inherit;
-        display: block;
       }
+
       .post:hover {
-        background-color: #f6f8fa;
+        transform: translateY(-5px);
+        box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
       }
-      .post-title {
-        margin-top: 0;
-        color: #24292e;
+
+      .post-image-container {
+        width: 100%;
+        height: 200px;
+        overflow: hidden;
       }
-      .post-date {
-        color: #6a737d;
-        font-size: 0.9em;
+
+      .post-preview-image {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.3s ease;
       }
+
+      .post:hover .post-preview-image {
+        transform: scale(1.05);
+      }
+
       .post-content {
-        margin-top: 20px;
+        padding: 1.5rem;
+      }
+
+      .post-title {
+        margin: 0 0 1rem 0;
+        color: var(--primary-color);
+        font-size: 1.5rem;
+        font-weight: 600;
+      }
+
+      .post-date {
+        color: var(--secondary-color);
+        font-size: 0.9rem;
+        margin-bottom: 1rem;
+      }
+
+      .post-excerpt {
+        color: var(--secondary-color);
         display: -webkit-box;
         -webkit-line-clamp: 3;
         -webkit-box-orient: vertical;
         overflow: hidden;
+        margin: 0;
       }
+
+      /* Modal styles */
+      .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.9);
+        z-index: 1000;
+        cursor: pointer;
+      }
+
+      .modal-content {
+        max-width: 90%;
+        max-height: 90%;
+        margin: auto;
+        display: block;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+      }
+
       .post-preview-image {
-        max-width: 100%;
-        max-height: 200px;
-        margin-top: 10px;
-        border-radius: 4px;
+        cursor: pointer;
       }
     </style>
   </head>
   <body>
-    <h1>GitHub Blog</h1>
-    <div id="posts"></div>
+    <header>
+      <div class="container">
+        <h1>GitHub Blog</h1>
+      </div>
+    </header>
+    <div class="container">
+      <div id="posts" class="posts-grid"></div>
+    </div>
+    <!-- Modal -->
+    <div id="imageModal" class="modal">
+      <img class="modal-content" id="modalImage" />
+    </div>
     <script>
       // Function to fetch and display posts
       async function loadPosts() {
         try {
-          // Fetch meta.json to get list of posts
           const metaResponse = await fetch("./posts/meta.json");
           const meta = await metaResponse.json();
-
           const postsContainer = document.getElementById("posts");
 
-          // Load each post file
           for (const postFile of meta.posts) {
             try {
               const postResponse = await fetch(`./posts/${postFile}`);
@@ -72,18 +167,24 @@
               postElement.className = "post";
               postElement.href = `./post.html?id=${postFile}`;
 
-              let previewImage = "";
+              let imageHtml = "";
               if (post.files && post.files.length > 0) {
-                previewImage = `<img src="/images/${post.files[0].name}" alt="Preview" class="post-preview-image">`;
+                imageHtml = `
+                  <div class="post-image-container">
+                    <img src="./images/${post.files[0].name}" alt="Preview" class="post-preview-image" onclick="openModal(event, this.src)">
+                  </div>
+                `;
               }
 
               postElement.innerHTML = `
-                <h2 class="post-title">${post.title}</h2>
-                <div class="post-date">${new Date(
-                  post.createdAt
-                ).toLocaleDateString()}</div>
-                <div class="post-content">${post.content}</div>
-                ${previewImage}
+                ${imageHtml}
+                <div class="post-content">
+                  <h2 class="post-title">${post.title}</h2>
+                  <div class="post-date">${new Date(
+                    post.createdAt
+                  ).toLocaleDateString()}</div>
+                  <p class="post-excerpt">${post.content}</p>
+                </div>
               `;
               postsContainer.appendChild(postElement);
             } catch (error) {
@@ -95,7 +196,20 @@
         }
       }
 
-      // Load posts when page loads
+      // Modal functions
+      function openModal(event, imageSrc) {
+        event.preventDefault();
+        const modal = document.getElementById("imageModal");
+        const modalImg = document.getElementById("modalImage");
+        modal.style.display = "block";
+        modalImg.src = imageSrc;
+      }
+
+      // Close modal
+      document.getElementById("imageModal").onclick = function () {
+        this.style.display = "none";
+      };
+
       window.addEventListener("load", loadPosts);
     </script>
   </body>

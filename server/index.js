@@ -4,6 +4,7 @@ const multer = require('multer');
 const { Octokit } = require('octokit');
 const fs = require('fs').promises;
 const path = require('path');
+const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
 
 // Log environment variables
@@ -296,29 +297,33 @@ app.post('/api/posts', upload.array('files'), async (req, res) => {
   try {
     const { title, content } = req.body;
     const files = req.files || [];
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `${timestamp}.json`;
+    const postId = uuidv4();
+    const filename = `${postId}.json`;
 
     // Upload files to GitHub
     const uploadedFiles = [];
     for (const file of files) {
-      const imagePath = `images/${file.originalname}`;
+      const fileId = uuidv4();
+      const fileExtension = path.extname(file.originalname);
+      const imagePath = `images/${fileId}${fileExtension}`;
       await octokit.rest.repos.createOrUpdateFileContents({
         owner: process.env.GITHUB_OWNER,
         repo: process.env.GITHUB_REPO,
         path: imagePath,
-        message: `Upload image: ${file.originalname}`,
+        message: `Upload image: ${fileId}`,
         content: file.buffer.toString('base64'),
         branch: 'main'
       });
       uploadedFiles.push({
-        name: file.originalname,
+        id: fileId,
+        name: `${fileId}${fileExtension}`,
         url: `https://raw.githubusercontent.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/main/${imagePath}`
       });
     }
 
     // Create post data
     const postData = {
+      id: postId,
       title,
       content,
       createdAt: new Date().toISOString(),
@@ -338,7 +343,7 @@ app.post('/api/posts', upload.array('files'), async (req, res) => {
     // Update meta.json
     await updateMetaJson(filename);
 
-    res.json({ success: true, filename });
+    res.json({ success: true, filename, postId });
   } catch (error) {
     console.error('Error creating post:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -355,7 +360,7 @@ app.get('/api/posts', async (req, res) => {
     });
 
     const posts = await Promise.all(
-      response.data.map(async (file) => {
+      response.data.filter((file) => !file.path.endsWith('meta.json')).map(async (file) => {
         const content = await octokit.rest.repos.getContent({
           owner: process.env.GITHUB_OWNER,
           repo: process.env.GITHUB_REPO,
