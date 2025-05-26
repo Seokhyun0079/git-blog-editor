@@ -37,6 +37,10 @@ function App() {
     fetchPosts();
   };
 
+  const handlePostDelete = () => {
+    fetchPosts();
+  };
+
   return (
     <Box sx={{ flexGrow: 1 }}>
       <AppBar position="static">
@@ -61,7 +65,7 @@ function App() {
         ) : showEditor ? (
           <PostEditor onPostCreated={handlePostCreated} />
         ) : (
-          <PostList posts={posts} />
+          <PostList posts={posts} onDelete={handlePostDelete} />
         )}
       </Container>
     </Box>

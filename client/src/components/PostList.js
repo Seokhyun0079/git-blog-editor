@@ -14,7 +14,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 
 import axios from 'axios';
 
-const PostList = ({ posts }) => {
+const PostList = ({ posts, onDelete }) => {
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -28,6 +28,9 @@ const PostList = ({ posts }) => {
   const handleDeletePost = async (id) => {
     try {
       await axios.delete(`http://localhost:5000/api/posts/${id}`);
+      if (onDelete) {
+        onDelete(id);
+      }
     } catch (error) {
       console.error('Error deleting post:', error);
     }
