@@ -144,17 +144,39 @@ async function createOrUpdateReadme() {
   }
 }
 
-// Check and create/update template files on server start
-async function initializeTemplates() {
-  await createOrUpdateTemplate('index.html');
-  await createOrUpdateTemplate('post.html');
-}
-
 // Initialize templates and README on server start
 async function initializeFiles() {
-  await createOrUpdateTemplate('index.html');
-  await createOrUpdateTemplate('post.html');
-  await createOrUpdateReadme();
+  try {
+    // Create posts directory if it doesn't exist
+    await octokit.rest.repos.createOrUpdateFileContents({
+      owner: process.env.GITHUB_OWNER,
+      repo: process.env.GITHUB_REPO,
+      path: 'posts/.gitkeep',
+      message: 'Create posts directory',
+      content: Buffer.from('').toString('base64'),
+      branch: 'main'
+    });
+
+    // Create images directory if it doesn't exist
+    await octokit.rest.repos.createOrUpdateFileContents({
+      owner: process.env.GITHUB_OWNER,
+      repo: process.env.GITHUB_REPO,
+      path: 'images/.gitkeep',
+      message: 'Create images directory',
+      content: Buffer.from('').toString('base64'),
+      branch: 'main'
+    });
+
+    await createOrUpdateTemplate('index.html');
+    await createOrUpdateTemplate('post.html');
+    await createOrUpdateReadme();
+  } catch (error) {
+    if (error.status === 422) {
+      console.log('Directories already exist');
+    } else {
+      console.error('Error initializing files:', error);
+    }
+  }
 }
 
 // Initialize files on server start
@@ -292,6 +314,77 @@ app.post('/api/upload', upload.array('images'), async (req, res) => {
   }
 });
 
+app.delete('/api/posts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get meta.json
+    const response = await octokit.rest.repos.getContent({
+      owner: process.env.GITHUB_OWNER,
+      repo: process.env.GITHUB_REPO,
+      path: 'posts/meta.json'
+    });
+    const metaContent = JSON.parse(Buffer.from(response.data.content, 'base64').toString());
+
+    // Get post file
+    const postResponse = await octokit.rest.repos.getContent({
+      owner: process.env.GITHUB_OWNER,
+      repo: process.env.GITHUB_REPO,
+      path: `posts/${id}.json`
+    });
+    const postContent = JSON.parse(Buffer.from(postResponse.data.content, 'base64').toString());
+
+    // Delete attached files
+    if (postContent.files && postContent.files.length > 0) {
+      for (const file of postContent.files) {
+        const filePath = file.url.split('/main/')[1];
+        console.log('Deleting file:', filePath);
+
+        const fileResponse = await octokit.rest.repos.getContent({
+          owner: process.env.GITHUB_OWNER,
+          repo: process.env.GITHUB_REPO,
+          path: filePath
+        });
+
+        await octokit.rest.repos.deleteFile({
+          owner: process.env.GITHUB_OWNER,
+          repo: process.env.GITHUB_REPO,
+          path: filePath,
+          message: 'Delete post',
+          branch: 'main',
+          sha: fileResponse.data.sha
+        });
+      }
+    }
+
+    // Delete post file
+    await octokit.rest.repos.deleteFile({
+      owner: process.env.GITHUB_OWNER,
+      repo: process.env.GITHUB_REPO,
+      path: `posts/${id}.json`,
+      message: 'Delete post',
+      branch: 'main',
+      sha: postResponse.data.sha
+    });
+    metaContent.posts = metaContent.posts.filter(post => post !== `${id}.json`);
+    // Update meta.json
+    await octokit.rest.repos.createOrUpdateFileContents({
+      owner: process.env.GITHUB_OWNER,
+      repo: process.env.GITHUB_REPO,
+      path: 'posts/meta.json',
+      message: 'Update meta.json',
+      content: Buffer.from(JSON.stringify(metaContent, null, 2)).toString('base64'),
+      branch: 'main',
+      sha: response.data.sha
+    });
+
+    res.json({ success: true, message: 'Post deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting post:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Create blog post endpoint
 app.post('/api/posts', upload.array('files'), async (req, res) => {
   try {
@@ -360,17 +453,27 @@ app.get('/api/posts', async (req, res) => {
     });
 
     const posts = await Promise.all(
-      response.data.filter((file) => !file.path.endsWith('meta.json')).map(async (file) => {
-        const content = await octokit.rest.repos.getContent({
-          owner: process.env.GITHUB_OWNER,
-          repo: process.env.GITHUB_REPO,
-          path: file.path
-        });
-        return JSON.parse(Buffer.from(content.data.content, 'base64').toString());
-      })
+      response.data
+        .filter((file) => !file.path.endsWith('meta.json') && !file.path.endsWith('.gitkeep'))
+        .map(async (file) => {
+          try {
+            const content = await octokit.rest.repos.getContent({
+              owner: process.env.GITHUB_OWNER,
+              repo: process.env.GITHUB_REPO,
+              path: file.path
+            });
+            return JSON.parse(Buffer.from(content.data.content, 'base64').toString());
+          } catch (error) {
+            console.error(`Error fetching post ${file.path}:`, error);
+            return null;
+          }
+        })
     );
 
-    res.json({ success: true, data: posts });
+    // Filter out any null values from failed post fetches
+    const validPosts = posts.filter(post => post !== null);
+
+    res.json({ success: true, data: validPosts });
   } catch (error) {
     console.error('Error fetching posts:', error);
     res.status(500).json({ success: false, error: error.message });

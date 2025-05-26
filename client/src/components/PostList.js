@@ -6,13 +6,17 @@ import {
   Paper,
   Typography,
   Box,
-  Chip
+  Chip,
+  IconButton
 } from '@mui/material';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+import DeleteIcon from '@mui/icons-material/Delete';
+
+import axios from 'axios';
 
 const PostList = ({ posts }) => {
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('ko-KR', {
+    return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -21,16 +25,24 @@ const PostList = ({ posts }) => {
     });
   };
 
+  const handleDeletePost = async (id) => {
+    try {
+      await axios.delete(`http://localhost:5000/api/posts/${id}`);
+    } catch (error) {
+      console.error('Error deleting post:', error);
+    }
+  };
+
   return (
     <Box>
       <Typography variant="h5" component="h2" gutterBottom>
-        블로그 포스트
+        Blog Posts
       </Typography>
 
       {posts.length === 0 ? (
         <Paper sx={{ p: 3, textAlign: 'center' }}>
           <Typography color="textSecondary">
-            아직 작성된 포스트가 없습니다.
+            No posts have been written yet.
           </Typography>
         </Paper>
       ) : (
@@ -60,7 +72,7 @@ const PostList = ({ posts }) => {
                         color="textSecondary"
                         sx={{ display: 'block', mt: 1 }}
                       >
-                        작성일: {formatDate(post.createdAt)}
+                        Created: {formatDate(post.createdAt)}
                       </Typography>
                       {post.files && post.files.length > 0 && (
                         <Box sx={{ mt: 1 }}>
@@ -78,6 +90,14 @@ const PostList = ({ posts }) => {
                     </Box>
                   }
                 />
+                <IconButton
+                  edge="end"
+                  aria-label="delete"
+                  onClick={() => handleDeletePost(post.id)}
+                  sx={{ color: 'error.main' }}
+                >
+                  <DeleteIcon />
+                </IconButton>
               </ListItem>
             </Paper>
           ))}
