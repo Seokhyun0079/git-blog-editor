@@ -16,6 +16,7 @@ function App() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showEditor, setShowEditor] = useState(false);
+  const [selectedPost, setSelectedPost] = useState(null);
 
   useEffect(() => {
     fetchPosts();
@@ -24,7 +25,7 @@ function App() {
   const fetchPosts = async () => {
     try {
       const response = await axios.get('http://localhost:5000/api/posts');
-      setPosts(response.data.data);
+      setPosts(response.data.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
       setLoading(false);
     } catch (error) {
       console.error('Error fetching posts:', error);
@@ -41,6 +42,11 @@ function App() {
     fetchPosts();
   };
 
+  const handlePostClick = (post) => {
+    setSelectedPost(post);
+    setShowEditor(true);
+  };
+
   return (
     <Box sx={{ flexGrow: 1 }}>
       <AppBar position="static">
@@ -50,9 +56,12 @@ function App() {
           </Typography>
           <Button
             color="inherit"
-            onClick={() => setShowEditor(!showEditor)}
+            onClick={() => {
+              setSelectedPost(null)
+              setShowEditor(!showEditor)
+            }}
           >
-            {showEditor ? '목록 보기' : '새 글 작성'}
+            {showEditor ? 'View List' : 'New Post'}
           </Button>
         </Toolbar>
       </AppBar>
@@ -63,9 +72,9 @@ function App() {
             <CircularProgress />
           </Box>
         ) : showEditor ? (
-          <PostEditor onPostCreated={handlePostCreated} />
+          <PostEditor onPostCreated={handlePostCreated} selectedPost={selectedPost} />
         ) : (
-          <PostList posts={posts} onDelete={handlePostDelete} />
+          <PostList posts={posts} onDelete={handlePostDelete} onPostClick={handlePostClick} />
         )}
       </Container>
     </Box>

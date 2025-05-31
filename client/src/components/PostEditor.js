@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   TextField,
@@ -16,7 +16,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import axios from 'axios';
 
-const PostEditor = ({ onPostCreated }) => {
+const PostEditor = ({ onPostCreated, selectedPost }) => {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [files, setFiles] = useState([]);
@@ -44,12 +44,23 @@ const PostEditor = ({ onPostCreated }) => {
       files.forEach(file => {
         formData.append('files', file);
       });
+      let response;
+      if (selectedPost) {
+        formData.append('id', selectedPost.id);
+        response = await axios.put(`http://localhost:5000/api/posts/${selectedPost.id}`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+      } else {
+        response = await axios.post('http://localhost:5000/api/posts', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
 
-      const response = await axios.post('http://localhost:5000/api/posts', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      }
+
 
       if (response.data.success) {
         setTitle('');
@@ -66,6 +77,14 @@ const PostEditor = ({ onPostCreated }) => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (selectedPost) {
+      setTitle(selectedPost.title);
+      setContent(selectedPost.content);
+      setFiles(selectedPost.files);
+    }
+  }, [selectedPost]);
 
   return (
     <Paper elevation={3} sx={{ p: 3 }}>

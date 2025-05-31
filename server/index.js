@@ -5,6 +5,7 @@ const { Octokit } = require('octokit');
 const fs = require('fs').promises;
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const { deleteFile, createOrUpdateFile, getContent, createImageFile, getFile } = require('./git-utils');
 require('dotenv').config();
 
 // Log environment variables
@@ -319,64 +320,25 @@ app.delete('/api/posts/:id', async (req, res) => {
     const { id } = req.params;
 
     // Get meta.json
-    const response = await octokit.rest.repos.getContent({
-      owner: process.env.GITHUB_OWNER,
-      repo: process.env.GITHUB_REPO,
-      path: 'posts/meta.json'
-    });
-    const metaContent = JSON.parse(Buffer.from(response.data.content, 'base64').toString());
-
+    const metaContent = await getContent('posts/meta.json');
     // Get post file
-    const postResponse = await octokit.rest.repos.getContent({
-      owner: process.env.GITHUB_OWNER,
-      repo: process.env.GITHUB_REPO,
-      path: `posts/${id}.json`
-    });
-    const postContent = JSON.parse(Buffer.from(postResponse.data.content, 'base64').toString());
+    const postContent = await getContent(`posts/${id}.json`);
 
     // Delete attached files
     if (postContent.files && postContent.files.length > 0) {
       for (const file of postContent.files) {
         const filePath = file.url.split('/main/')[1];
         console.log('Deleting file:', filePath);
-
-        const fileResponse = await octokit.rest.repos.getContent({
-          owner: process.env.GITHUB_OWNER,
-          repo: process.env.GITHUB_REPO,
-          path: filePath
-        });
-
-        await octokit.rest.repos.deleteFile({
-          owner: process.env.GITHUB_OWNER,
-          repo: process.env.GITHUB_REPO,
-          path: filePath,
-          message: 'Delete post',
-          branch: 'main',
-          sha: fileResponse.data.sha
-        });
+        const fileResponse = await getContent(filePath);
+        await deleteFile(filePath, fileResponse.data.sha);
       }
     }
 
     // Delete post file
-    await octokit.rest.repos.deleteFile({
-      owner: process.env.GITHUB_OWNER,
-      repo: process.env.GITHUB_REPO,
-      path: `posts/${id}.json`,
-      message: 'Delete post',
-      branch: 'main',
-      sha: postResponse.data.sha
-    });
-    metaContent.posts = metaContent.posts.filter(post => post !== `${id}.json`);
+    await deleteFile(`posts/${id}.json`, postContent.sha);
+    metaContent.content.posts = metaContent.content.posts.filter(post => post !== `${id}.json`);
     // Update meta.json
-    await octokit.rest.repos.createOrUpdateFileContents({
-      owner: process.env.GITHUB_OWNER,
-      repo: process.env.GITHUB_REPO,
-      path: 'posts/meta.json',
-      message: 'Update meta.json',
-      content: Buffer.from(JSON.stringify(metaContent, null, 2)).toString('base64'),
-      branch: 'main',
-      sha: response.data.sha
-    });
+    await createOrUpdateFile('posts/meta.json', metaContent.content, 'Update meta.json', metaContent.sha);
 
     res.json({ success: true, message: 'Post deleted successfully' });
   } catch (error) {
@@ -399,14 +361,7 @@ app.post('/api/posts', upload.array('files'), async (req, res) => {
       const fileId = uuidv4();
       const fileExtension = path.extname(file.originalname);
       const imagePath = `images/${fileId}${fileExtension}`;
-      await octokit.rest.repos.createOrUpdateFileContents({
-        owner: process.env.GITHUB_OWNER,
-        repo: process.env.GITHUB_REPO,
-        path: imagePath,
-        message: `Upload image: ${fileId}`,
-        content: file.buffer.toString('base64'),
-        branch: 'main'
-      });
+      await createImageFile(imagePath, fileId, file);
       uploadedFiles.push({
         id: fileId,
         name: `${fileId}${fileExtension}`,
@@ -424,14 +379,7 @@ app.post('/api/posts', upload.array('files'), async (req, res) => {
     };
 
     // Create post file
-    await octokit.rest.repos.createOrUpdateFileContents({
-      owner: process.env.GITHUB_OWNER,
-      repo: process.env.GITHUB_REPO,
-      path: `posts/${filename}`,
-      message: `Create post: ${title}`,
-      content: Buffer.from(JSON.stringify(postData, null, 2)).toString('base64'),
-      branch: 'main'
-    });
+    await createOrUpdateFile(`posts/${filename}`, postData, `Create post: ${title}`, null);
 
     // Update meta.json
     await updateMetaJson(filename);
@@ -442,6 +390,7 @@ app.post('/api/posts', upload.array('files'), async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
 
 // Get blog posts endpoint
 app.get('/api/posts', async (req, res) => {
@@ -476,6 +425,82 @@ app.get('/api/posts', async (req, res) => {
     res.json({ success: true, data: validPosts });
   } catch (error) {
     console.error('Error fetching posts:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.put('/api/posts/:id', upload.array('files'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, content } = req.body;
+    const files = req.files || [];
+
+    // Get post file
+    const postContent = await getContent(`posts/${id}.json`);
+
+    // Compare existing files with new files
+    const existingFiles = postContent.content.files || [];
+    let newFiles = [];
+    if (req.body.files === "[object Object]") {
+      newFiles = [];
+    } else {
+      newFiles = JSON.parse(req.body.files || '[]');
+    }
+
+    // Find files to delete (exist in GitHub but not in new files)
+    const filesToDelete = existingFiles.filter(existingFile =>
+      !newFiles.some(newFile => newFile.id === existingFile.id)
+    );
+
+    console.log('filesToDelete');
+    // Delete files that are no longer needed
+    for (const file of filesToDelete) {
+      const filePath = file.url.split('/main/')[1];
+      console.log('filePath', filePath);
+      const fileResponse = await getFile(filePath);
+      await deleteFile(filePath, fileResponse.sha);
+      console.log('file deleted');
+    }
+
+    // Upload new files
+    const uploadedFiles = [];
+    for (const file of files) {
+      const fileId = uuidv4();
+      const fileExtension = path.extname(file.originalname);
+      const imagePath = `images/${fileId}${fileExtension}`;
+      await createImageFile(imagePath, fileId, file);
+      uploadedFiles.push({
+        id: fileId,
+        name: `${fileId}${fileExtension}`,
+        url: `https://raw.githubusercontent.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/main/${imagePath}`
+      });
+    }
+    console.log('file Uploaded');
+
+    // Combine existing files that weren't deleted with new files
+    const finalFiles = [
+      ...existingFiles.filter(existingFile =>
+        newFiles.some(newFile => newFile.id === existingFile.id)
+      ),
+      ...uploadedFiles
+    ];
+
+    // Update post data
+    const updatedPostData = {
+      ...postContent.content,
+      title,
+      content,
+      updatedAt: new Date().toISOString(),
+      files: finalFiles
+    };
+
+    // Update post file
+    const postResponse = await getContent(`posts/${id}.json`);
+    await createOrUpdateFile(`posts/${id}.json`, updatedPostData, `Update post: ${title}`, postResponse.sha);
+
+    res.json({ success: true, message: 'Post updated successfully' });
+  } catch (error) {
+    console.error('Error updating post:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

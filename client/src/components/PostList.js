@@ -14,7 +14,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 
 import axios from 'axios';
 
-const PostList = ({ posts, onDelete }) => {
+const PostList = ({ posts, onDelete, onPostClick }) => {
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -36,6 +36,7 @@ const PostList = ({ posts, onDelete }) => {
     }
   };
 
+
   return (
     <Box>
       <Typography variant="h5" component="h2" gutterBottom>
@@ -54,6 +55,7 @@ const PostList = ({ posts, onDelete }) => {
             <Paper key={index} sx={{ mb: 2 }}>
               <ListItem alignItems="flex-start">
                 <ListItemText
+                  onClick={() => onPostClick(post)}
                   primary={
                     <Typography variant="h6" component="div">
                       {post.title}
