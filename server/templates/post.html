@@ -80,6 +80,7 @@
         font-size: 1.1rem;
         line-height: 1.8;
         color: var(--primary-color);
+        white-space: pre-line;
       }
 
       .post-content p {
@@ -177,7 +178,7 @@
 
           const content = document.createElement("div");
           content.className = "post-content";
-          content.innerHTML = post.content;
+          content.innerHTML = post.content.replace(/\n/g, "<br>");
           postContent.appendChild(content);
         } catch (error) {
           console.error("Error loading post:", error);
