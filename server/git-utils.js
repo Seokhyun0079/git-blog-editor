@@ -39,6 +39,23 @@ const createImageFile = async (imagePath, fileId, file) => {
   });
 };
 
+const createContentFile = async (contentFilePath, fileId, base64) => {
+  console.log('createContentFile', contentFilePath, fileId, base64 ? 'base64 data present' : 'no base64 data');
+
+  if (!base64) {
+    throw new Error(`No base64 content provided for file: ${fileId}`);
+  }
+
+  await octokit.rest.repos.createOrUpdateFileContents({
+    owner: process.env.GITHUB_OWNER,
+    repo: process.env.GITHUB_REPO,
+    path: contentFilePath,
+    message: `Upload content file: ${fileId}`,
+    content: base64,
+    branch: 'main'
+  });
+};
+
 const getContent = async (filePath) => {
   const response = await octokit.rest.repos.getContent({
     owner: process.env.GITHUB_OWNER,
@@ -68,5 +85,6 @@ module.exports = {
   createOrUpdateFile,
   getContent,
   createImageFile,
-  getFile
+  getFile,
+  createContentFile
 };

@@ -5,7 +5,7 @@ const { Octokit } = require('octokit');
 const fs = require('fs').promises;
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const { deleteFile, createOrUpdateFile, getContent, createImageFile, getFile } = require('./git-utils');
+const { deleteFile, createOrUpdateFile, getContent, createImageFile, getFile, createContentFile } = require('./git-utils');
 require('dotenv').config();
 
 // Log environment variables
@@ -78,16 +78,41 @@ async function createOrUpdateTemplate(filename) {
 
     // Create or update file if needed
     if (needsUpdate) {
-      await octokit.rest.repos.createOrUpdateFileContents({
-        owner: process.env.GITHUB_OWNER,
-        repo: process.env.GITHUB_REPO,
-        path: filename,
-        message: currentSha ? `Update ${filename}` : `Create ${filename}`,
-        content: Buffer.from(templateContent).toString('base64'),
-        branch: 'main',
-        ...(currentSha && { sha: currentSha })
-      });
-      console.log(currentSha ? `${filename} has been updated` : `${filename} has been created`);
+      try {
+        await octokit.rest.repos.createOrUpdateFileContents({
+          owner: process.env.GITHUB_OWNER,
+          repo: process.env.GITHUB_REPO,
+          path: filename,
+          message: currentSha ? `Update ${filename}` : `Create ${filename}`,
+          content: Buffer.from(templateContent).toString('base64'),
+          branch: 'main',
+          ...(currentSha && { sha: currentSha })
+        });
+        console.log(currentSha ? `${filename} has been updated` : `${filename} has been created`);
+      } catch (updateError) {
+        if (updateError.status === 409) {
+          console.log(`${filename} SHA mismatch. Fetching latest version and retrying...`);
+          // SHA가 일치하지 않는 경우, 최신 버전을 가져와서 다시 시도
+          const latestResponse = await octokit.rest.repos.getContent({
+            owner: process.env.GITHUB_OWNER,
+            repo: process.env.GITHUB_REPO,
+            path: filename
+          });
+
+          await octokit.rest.repos.createOrUpdateFileContents({
+            owner: process.env.GITHUB_OWNER,
+            repo: process.env.GITHUB_REPO,
+            path: filename,
+            message: `Update ${filename}`,
+            content: Buffer.from(templateContent).toString('base64'),
+            branch: 'main',
+            sha: latestResponse.data.sha
+          });
+          console.log(`${filename} has been updated after SHA sync`);
+        } else {
+          throw updateError;
+        }
+      }
     }
   } catch (error) {
     console.error(`Error checking/creating/updating ${filename}:`, error);
@@ -231,11 +256,11 @@ async function updateMetaJson(newPostFile) {
 }
 
 // Function to create or update index.html
-async function createOrUpdateIndexHtml() {
+async function createOrUpdateIndexHtml(filename) {
   try {
     let currentSha = null;
     let needsUpdate = true;
-    const templateContent = await readTemplate('index.html');
+    const templateContent = await readTemplate(filename);
 
     // Check if index.html exists
     try {
@@ -248,15 +273,15 @@ async function createOrUpdateIndexHtml() {
       // Compare content if file exists
       const currentContent = Buffer.from(response.data.content, 'base64').toString();
       if (currentContent === templateContent) {
-        console.log('index.html is up to date');
+        console.log(`${filename} is up to date`);
         needsUpdate = false;
       } else {
-        console.log('index.html needs update');
+        console.log(`${filename} needs update`);
         currentSha = response.data.sha;
       }
     } catch (error) {
       if (error.status === 404) {
-        console.log('index.html does not exist. Creating new file.');
+        console.log(`${filename} does not exist. Creating new file.`);
       } else {
         throw error;
       }
@@ -267,8 +292,8 @@ async function createOrUpdateIndexHtml() {
       await octokit.rest.repos.createOrUpdateFileContents({
         owner: process.env.GITHUB_OWNER,
         repo: process.env.GITHUB_REPO,
-        path: 'index.html',
-        message: currentSha ? 'Update index.html' : 'Create index.html',
+        path: filename,
+        message: currentSha ? `Update ${filename}` : `Create ${filename}`,
         content: Buffer.from(templateContent).toString('base64'),
         branch: 'main',
         ...(currentSha && { sha: currentSha })
@@ -276,12 +301,13 @@ async function createOrUpdateIndexHtml() {
       console.log(currentSha ? 'index.html has been updated' : 'index.html has been created');
     }
   } catch (error) {
-    console.error('Error checking/creating/updating index.html:', error);
+    console.error(`Error checking/creating/updating ${filename}:`, error);
   }
 }
 
 // Check and create/update index.html on server start
-createOrUpdateIndexHtml();
+createOrUpdateIndexHtml('index.html');
+createOrUpdateIndexHtml('post.html');
 
 // Upload images endpoint
 app.post('/api/upload', upload.array('images'), async (req, res) => {
@@ -351,11 +377,42 @@ app.delete('/api/posts/:id', async (req, res) => {
 app.post('/api/posts', upload.array('files'), async (req, res) => {
   try {
     const { title, content } = req.body;
+    let replacedContent = content;
     const files = req.files || [];
+    const contentFiles = req.body.contentFiles ? JSON.parse(req.body.contentFiles) : [];
     const postId = uuidv4();
     const filename = `${postId}.json`;
 
-    // Upload files to GitHub
+    // Upload contentFiles (UUID 기반 미디어) to GitHub
+    const uploadedContentFiles = [];
+    for (const file of contentFiles) {
+      console.log('Processing contentFile:', file); // 디버깅용 로그
+
+      // base64 데이터가 data:image/... 형태인 경우 실제 base64 부분만 추출
+      let base64Content = file.base64;
+      console.log('base64Content', base64Content);
+      if (base64Content && base64Content.includes(',')) {
+        base64Content = base64Content.split(',')[1];
+      }
+
+      if (!base64Content) {
+        console.log('Skipping file without base64 content:', file);
+        continue;
+      }
+
+      const contentFilePath = `content/${file.name}`;
+      await createContentFile(contentFilePath, file.uuid, base64Content);
+      uploadedContentFiles.push({
+        id: file.uuid,
+        name: file.name,
+        url: `https://raw.githubusercontent.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/main/${contentFilePath}`,
+        uuid: file.uuid, // UUID 보존
+        type: file.type // 파일 타입 보존
+      });
+      replacedContent = replacedContent.replaceAll(file.uuid, `https://raw.githubusercontent.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/main/${contentFilePath}`);
+    }
+
+    // Upload regular attached files to GitHub
     const uploadedFiles = [];
     for (const file of files) {
       const fileId = uuidv4();
@@ -373,9 +430,10 @@ app.post('/api/posts', upload.array('files'), async (req, res) => {
     const postData = {
       id: postId,
       title,
-      content,
+      content: replacedContent,
       createdAt: new Date().toISOString(),
-      files: uploadedFiles
+      files: uploadedFiles,
+      contentFiles: uploadedContentFiles // UUID 기반 미디어 파일들
     };
 
     // Create post file
@@ -434,6 +492,7 @@ app.put('/api/posts/:id', upload.array('files'), async (req, res) => {
     const { id } = req.params;
     const { title, content } = req.body;
     const files = req.files || [];
+    const contentFiles = req.body.contentFiles ? JSON.parse(req.body.contentFiles) : [];
 
     // Get post file
     const postContent = await getContent(`posts/${id}.json`);
@@ -445,6 +504,29 @@ app.put('/api/posts/:id', upload.array('files'), async (req, res) => {
       newFiles = [];
     } else {
       newFiles = JSON.parse(req.body.files || '[]');
+    }
+
+    // Compare existing contentFiles with new contentFiles
+    const existingContentFiles = postContent.content.contentFiles || [];
+    let newContentFiles = [];
+    if (req.body.contentFiles === "[object Object]") {
+      newContentFiles = [];
+    } else {
+      newContentFiles = JSON.parse(req.body.contentFiles || '[]');
+    }
+
+    // Find contentFiles to delete (exist in GitHub but not in new contentFiles)
+    const contentFilesToDelete = existingContentFiles.filter(existingFile =>
+      !newContentFiles.some(newFile => newFile.uuid === existingFile.uuid)
+    );
+
+    // Delete contentFiles that are no longer needed
+    for (const file of contentFilesToDelete) {
+      const filePath = file.url.split('/main/')[1];
+      console.log('contentFile to delete:', filePath);
+      const fileResponse = await getFile(filePath);
+      await deleteFile(filePath, fileResponse.sha);
+      console.log('contentFile deleted');
     }
 
     // Find files to delete (exist in GitHub but not in new files)
@@ -460,6 +542,39 @@ app.put('/api/posts/:id', upload.array('files'), async (req, res) => {
       const fileResponse = await getFile(filePath);
       await deleteFile(filePath, fileResponse.sha);
       console.log('file deleted');
+    }
+
+    // Upload new contentFiles (UUID 기반 미디어)
+    const uploadedContentFiles = [];
+    for (const file of contentFiles) {
+      console.log('Processing contentFile in PUT:', file); // 디버깅용 로그
+
+      // file.name이 없는 경우 처리
+      if (!file.name) {
+        console.log('Skipping file without name in PUT:', file);
+        continue;
+      }
+
+      // base64 데이터가 data:image/... 형태인 경우 실제 base64 부분만 추출
+      let base64Content = file.base64;
+      if (base64Content && base64Content.includes(',')) {
+        base64Content = base64Content.split(',')[1];
+      }
+
+      if (!base64Content) {
+        console.log('Skipping file without base64 content in PUT:', file);
+        continue;
+      }
+
+      const contentFilePath = `content/${file.name}`;
+      await createContentFile(contentFilePath, file.uuid, base64Content);
+      uploadedContentFiles.push({
+        id: file.uuid,
+        name: file.name,
+        url: `https://raw.githubusercontent.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/main/${contentFilePath}`,
+        uuid: file.uuid, // UUID 보존
+        type: file.type // 파일 타입 보존
+      });
     }
 
     // Upload new files
@@ -485,13 +600,22 @@ app.put('/api/posts/:id', upload.array('files'), async (req, res) => {
       ...uploadedFiles
     ];
 
+    // Combine existing contentFiles that weren't deleted with new contentFiles
+    const finalContentFiles = [
+      ...existingContentFiles.filter(existingFile =>
+        newContentFiles.some(newFile => newFile.uuid === existingFile.uuid)
+      ),
+      ...uploadedContentFiles
+    ];
+
     // Update post data
     const updatedPostData = {
       ...postContent.content,
       title,
       content,
       updatedAt: new Date().toISOString(),
-      files: finalFiles
+      files: finalFiles,
+      contentFiles: finalContentFiles // UUID 기반 미디어 파일들
     };
 
     // Update post file
