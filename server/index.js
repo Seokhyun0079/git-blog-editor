@@ -44,41 +44,41 @@ async function readTemplate(filename) {
   }
 }
 
-// Function to create or update template file
-async function createOrUpdateTemplate(filename) {
-  try {
-    let currentSha = null;
-    let needsUpdate = true;
-    const templateContent = await readTemplate(filename);
-
-    // Check if file exists
+// Function to create or update template file with retry logic
+async function createOrUpdateTemplate(filename, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const response = await octokit.rest.repos.getContent({
-        owner: process.env.GITHUB_OWNER,
-        repo: process.env.GITHUB_REPO,
-        path: filename
-      });
+      let currentSha = null;
+      let needsUpdate = true;
+      const templateContent = await readTemplate(filename);
 
-      // Compare content if file exists
-      const currentContent = Buffer.from(response.data.content, 'base64').toString();
-      if (currentContent === templateContent) {
-        console.log(`${filename} is up to date`);
-        needsUpdate = false;
-      } else {
-        console.log(`${filename} needs update`);
-        currentSha = response.data.sha;
-      }
-    } catch (error) {
-      if (error.status === 404) {
-        console.log(`${filename} does not exist. Creating new file.`);
-      } else {
-        throw error;
-      }
-    }
-
-    // Create or update file if needed
-    if (needsUpdate) {
+      // Check if file exists and get current SHA
       try {
+        const response = await octokit.rest.repos.getContent({
+          owner: process.env.GITHUB_OWNER,
+          repo: process.env.GITHUB_REPO,
+          path: filename
+        });
+
+        // Compare content if file exists
+        const currentContent = Buffer.from(response.data.content, 'base64').toString();
+        if (currentContent === templateContent) {
+          console.log(`${filename} is up to date`);
+          needsUpdate = false;
+        } else {
+          console.log(`${filename} needs update`);
+          currentSha = response.data.sha;
+        }
+      } catch (error) {
+        if (error.status === 404) {
+          console.log(`${filename} does not exist. Creating new file.`);
+        } else {
+          throw error;
+        }
+      }
+
+      // Create or update file if needed
+      if (needsUpdate) {
         await octokit.rest.repos.createOrUpdateFileContents({
           owner: process.env.GITHUB_OWNER,
           repo: process.env.GITHUB_REPO,
@@ -89,119 +89,148 @@ async function createOrUpdateTemplate(filename) {
           ...(currentSha && { sha: currentSha })
         });
         console.log(currentSha ? `${filename} has been updated` : `${filename} has been created`);
-      } catch (updateError) {
-        if (updateError.status === 409) {
-          console.log(`${filename} SHA mismatch. Fetching latest version and retrying...`);
-          // SHA가 일치하지 않는 경우, 최신 버전을 가져와서 다시 시도
-          const latestResponse = await octokit.rest.repos.getContent({
-            owner: process.env.GITHUB_OWNER,
-            repo: process.env.GITHUB_REPO,
-            path: filename
-          });
-
-          await octokit.rest.repos.createOrUpdateFileContents({
-            owner: process.env.GITHUB_OWNER,
-            repo: process.env.GITHUB_REPO,
-            path: filename,
-            message: `Update ${filename}`,
-            content: Buffer.from(templateContent).toString('base64'),
-            branch: 'main',
-            sha: latestResponse.data.sha
-          });
-          console.log(`${filename} has been updated after SHA sync`);
-        } else {
-          throw updateError;
-        }
       }
-    }
-  } catch (error) {
-    console.error(`Error checking/creating/updating ${filename}:`, error);
-  }
-}
 
-// Function to create or update README.md
-async function createOrUpdateReadme() {
-  try {
-    let currentSha = null;
-    let needsUpdate = true;
+      // Exit loop on successful completion
+      return;
 
-    const readmeContent = await readTemplate('README.md');
-
-    // Check if README.md exists
-    try {
-      const response = await octokit.rest.repos.getContent({
-        owner: process.env.GITHUB_OWNER,
-        repo: process.env.GITHUB_REPO,
-        path: 'README.md'
-      });
-
-      // Compare content if file exists
-      const currentContent = Buffer.from(response.data.content, 'base64').toString();
-      if (currentContent === readmeContent) {
-        console.log('README.md is up to date');
-        needsUpdate = false;
-      } else {
-        console.log('README.md needs update');
-        currentSha = response.data.sha;
-      }
     } catch (error) {
-      if (error.status === 404) {
-        console.log('README.md does not exist. Creating new file.');
+      if (error.status === 409 && attempt < maxRetries) {
+        console.log(`${filename} SHA mismatch (attempt ${attempt}/${maxRetries}). Retrying...`);
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        continue;
       } else {
+        console.error(`Error checking/creating/updating ${filename} (attempt ${attempt}):`, error);
+        if (attempt === maxRetries) {
+          console.error(`Failed to update ${filename} after ${maxRetries} attempts`);
+        }
         throw error;
       }
     }
+  }
+}
 
-    // Create or update file if needed
-    if (needsUpdate) {
-      await octokit.rest.repos.createOrUpdateFileContents({
-        owner: process.env.GITHUB_OWNER,
-        repo: process.env.GITHUB_REPO,
-        path: 'README.md',
-        message: currentSha ? 'Update README.md' : 'Create README.md',
-        content: Buffer.from(readmeContent).toString('base64'),
-        branch: 'main',
-        ...(currentSha && { sha: currentSha })
-      });
-      console.log(currentSha ? 'README.md has been updated' : 'README.md has been created');
+// Function to create or update README.md with retry logic
+async function createOrUpdateReadme(maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      let currentSha = null;
+      let needsUpdate = true;
+
+      const readmeContent = await readTemplate('README.md');
+
+      // Check if README.md exists
+      try {
+        const response = await octokit.rest.repos.getContent({
+          owner: process.env.GITHUB_OWNER,
+          repo: process.env.GITHUB_REPO,
+          path: 'README.md'
+        });
+
+        // Compare content if file exists
+        const currentContent = Buffer.from(response.data.content, 'base64').toString();
+        if (currentContent === readmeContent) {
+          console.log('README.md is up to date');
+          needsUpdate = false;
+        } else {
+          console.log('README.md needs update');
+          currentSha = response.data.sha;
+        }
+      } catch (error) {
+        if (error.status === 404) {
+          console.log('README.md does not exist. Creating new file.');
+        } else {
+          throw error;
+        }
+      }
+
+      // Create or update file if needed
+      if (needsUpdate) {
+        await octokit.rest.repos.createOrUpdateFileContents({
+          owner: process.env.GITHUB_OWNER,
+          repo: process.env.GITHUB_REPO,
+          path: 'README.md',
+          message: currentSha ? 'Update README.md' : 'Create README.md',
+          content: Buffer.from(readmeContent).toString('base64'),
+          branch: 'main',
+          ...(currentSha && { sha: currentSha })
+        });
+        console.log(currentSha ? 'README.md has been updated' : 'README.md has been created');
+      }
+
+      // Exit loop on successful completion
+      return;
+
+    } catch (error) {
+      if (error.status === 409 && attempt < maxRetries) {
+        console.log(`README.md SHA mismatch (attempt ${attempt}/${maxRetries}). Retrying...`);
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        continue;
+      } else {
+        console.error(`Error checking/creating/updating README.md (attempt ${attempt}):`, error);
+        if (attempt === maxRetries) {
+          console.error(`Failed to update README.md after ${maxRetries} attempts`);
+        }
+        throw error;
+      }
     }
-  } catch (error) {
-    console.error('Error checking/creating/updating README.md:', error);
   }
 }
 
 // Initialize templates and README on server start
 async function initializeFiles() {
   try {
+    console.log('Starting file initialization...');
+
     // Create posts directory if it doesn't exist
-    await octokit.rest.repos.createOrUpdateFileContents({
-      owner: process.env.GITHUB_OWNER,
-      repo: process.env.GITHUB_REPO,
-      path: 'posts/.gitkeep',
-      message: 'Create posts directory',
-      content: Buffer.from('').toString('base64'),
-      branch: 'main'
-    });
+    try {
+      await octokit.rest.repos.createOrUpdateFileContents({
+        owner: process.env.GITHUB_OWNER,
+        repo: process.env.GITHUB_REPO,
+        path: 'posts/.gitkeep',
+        message: 'Create posts directory',
+        content: Buffer.from('').toString('base64'),
+        branch: 'main'
+      });
+      console.log('Posts directory created');
+    } catch (error) {
+      if (error.status === 422) {
+        console.log('Posts directory already exists');
+      }
+    }
 
     // Create images directory if it doesn't exist
-    await octokit.rest.repos.createOrUpdateFileContents({
-      owner: process.env.GITHUB_OWNER,
-      repo: process.env.GITHUB_REPO,
-      path: 'images/.gitkeep',
-      message: 'Create images directory',
-      content: Buffer.from('').toString('base64'),
-      branch: 'main'
-    });
-
-    await createOrUpdateTemplate('index.html');
-    await createOrUpdateTemplate('post.html');
-    await createOrUpdateReadme();
-  } catch (error) {
-    if (error.status === 422) {
-      console.log('Directories already exist');
-    } else {
-      console.error('Error initializing files:', error);
+    try {
+      await octokit.rest.repos.createOrUpdateFileContents({
+        owner: process.env.GITHUB_OWNER,
+        repo: process.env.GITHUB_REPO,
+        path: 'images/.gitkeep',
+        message: 'Create images directory',
+        content: Buffer.from('').toString('base64'),
+        branch: 'main'
+      });
+      console.log('Images directory created');
+    } catch (error) {
+      if (error.status === 422) {
+        console.log('Images directory already exists');
+      }
     }
+
+    // Process template files sequentially (prevent concurrency issues)
+    console.log('Updating index.html...');
+    await createOrUpdateTemplate('index.html');
+
+    console.log('Updating post.html...');
+    await createOrUpdateTemplate('post.html');
+
+    console.log('Updating README.md...');
+    await createOrUpdateReadme();
+
+    console.log('File initialization completed successfully');
+  } catch (error) {
+    console.error('Error initializing files:', error);
   }
 }
 
@@ -305,9 +334,9 @@ async function createOrUpdateIndexHtml(filename) {
   }
 }
 
-// Check and create/update index.html on server start
-createOrUpdateIndexHtml('index.html');
-createOrUpdateIndexHtml('post.html');
+// These functions are already handled in initializeFiles(), so remove duplicate calls
+// createOrUpdateIndexHtml('index.html');
+// createOrUpdateIndexHtml('post.html');
 
 // Upload images endpoint
 app.post('/api/upload', upload.array('images'), async (req, res) => {
@@ -383,12 +412,12 @@ app.post('/api/posts', upload.array('files'), async (req, res) => {
     const postId = uuidv4();
     const filename = `${postId}.json`;
 
-    // Upload contentFiles (UUID 기반 미디어) to GitHub
+    // Upload contentFiles (UUID-based media) to GitHub
     const uploadedContentFiles = [];
     for (const file of contentFiles) {
-      console.log('Processing contentFile:', file); // 디버깅용 로그
+      console.log('Processing contentFile:', file); // Debug log
 
-      // base64 데이터가 data:image/... 형태인 경우 실제 base64 부분만 추출
+      // Extract actual base64 part if data is in data:image/... format
       let base64Content = file.base64;
       console.log('base64Content', base64Content);
       if (base64Content && base64Content.includes(',')) {
@@ -406,8 +435,8 @@ app.post('/api/posts', upload.array('files'), async (req, res) => {
         id: file.uuid,
         name: file.name,
         url: `https://raw.githubusercontent.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/main/${contentFilePath}`,
-        uuid: file.uuid, // UUID 보존
-        type: file.type // 파일 타입 보존
+        uuid: file.uuid, // Preserve UUID
+        type: file.type // Preserve file type
       });
       replacedContent = replacedContent.replaceAll(file.uuid, `https://raw.githubusercontent.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/main/${contentFilePath}`);
     }
@@ -433,7 +462,7 @@ app.post('/api/posts', upload.array('files'), async (req, res) => {
       content: replacedContent,
       createdAt: new Date().toISOString(),
       files: uploadedFiles,
-      contentFiles: uploadedContentFiles // UUID 기반 미디어 파일들
+      contentFiles: uploadedContentFiles // UUID-based media files
     };
 
     // Create post file
@@ -544,18 +573,18 @@ app.put('/api/posts/:id', upload.array('files'), async (req, res) => {
       console.log('file deleted');
     }
 
-    // Upload new contentFiles (UUID 기반 미디어)
+    // Upload new contentFiles (UUID-based media)
     const uploadedContentFiles = [];
     for (const file of contentFiles) {
-      console.log('Processing contentFile in PUT:', file); // 디버깅용 로그
+      console.log('Processing contentFile in PUT:', file); // Debug log
 
-      // file.name이 없는 경우 처리
+      // Handle case when file.name is missing
       if (!file.name) {
         console.log('Skipping file without name in PUT:', file);
         continue;
       }
 
-      // base64 데이터가 data:image/... 형태인 경우 실제 base64 부분만 추출
+      // Extract actual base64 part if data is in data:image/... format
       let base64Content = file.base64;
       if (base64Content && base64Content.includes(',')) {
         base64Content = base64Content.split(',')[1];
@@ -572,8 +601,8 @@ app.put('/api/posts/:id', upload.array('files'), async (req, res) => {
         id: file.uuid,
         name: file.name,
         url: `https://raw.githubusercontent.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/main/${contentFilePath}`,
-        uuid: file.uuid, // UUID 보존
-        type: file.type // 파일 타입 보존
+        uuid: file.uuid, // Preserve UUID
+        type: file.type // Preserve file type
       });
     }
 
@@ -615,7 +644,7 @@ app.put('/api/posts/:id', upload.array('files'), async (req, res) => {
       content,
       updatedAt: new Date().toISOString(),
       files: finalFiles,
-      contentFiles: finalContentFiles // UUID 기반 미디어 파일들
+      contentFiles: finalContentFiles // UUID-based media files
     };
 
     // Update post file

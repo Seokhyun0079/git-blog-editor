@@ -13,7 +13,11 @@ import {
   Grid,
   Card,
   CardMedia,
-  CardActions
+  CardActions,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
@@ -28,6 +32,19 @@ const getFileExtension = (filename) => {
   return lastDotIndex > 0 ? filename.substring(lastDotIndex) : '';
 };
 
+// YouTube URL에서 비디오 ID 추출 함수
+const extractYouTubeVideoId = (url) => {
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[2].length === 11) ? match[2] : null;
+};
+
+// YouTube URL 유효성 검사 함수
+const isValidYouTubeUrl = (url) => {
+  const videoId = extractYouTubeVideoId(url);
+  return videoId;
+};
+
 const PostEditor = ({ onPostCreated, selectedPost }) => {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -36,6 +53,48 @@ const PostEditor = ({ onPostCreated, selectedPost }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [dragOver, setDragOver] = useState(false);
+
+  const [youtubeVideoUrl, setYoutubeVideoUrl] = useState('');
+  const [youtubeDialogOpen, setYoutubeDialogOpen] = useState(false);
+  const [youtubeUrlInput, setYoutubeUrlInput] = useState('');
+
+  // YouTube 팝업창 열기 함수
+  const handleOpenYouTubeDialog = async () => {
+    try {
+      // 클립보드에서 텍스트 읽기
+      const clipboardText = await navigator.clipboard.readText();
+      if (clipboardText && isValidYouTubeUrl(clipboardText)) {
+        setYoutubeUrlInput(clipboardText);
+      } else {
+        setYoutubeUrlInput('');
+      }
+    } catch (error) {
+      // 클립보드 접근이 실패하거나 유효하지 않은 URL인 경우
+      console.log('클립보드 접근 실패 또는 유효하지 않은 URL:', error);
+      setYoutubeUrlInput('');
+    }
+    setYoutubeDialogOpen(true);
+  };
+
+  // YouTube 팝업창 닫기 함수
+  const handleCloseYouTubeDialog = () => {
+    setYoutubeDialogOpen(false);
+    setYoutubeUrlInput('');
+  };
+
+  // YouTube URL 확인 함수
+  const handleConfirmYouTubeUrl = () => {
+    const videoId = isValidYouTubeUrl(youtubeUrlInput);
+    if (!!videoId) {
+      const youtubeVideoUrl = "https://www.youtube.com/embed/" + videoId;
+      setYoutubeVideoUrl(youtubeVideoUrl);
+      setYoutubeDialogOpen(false);
+      setYoutubeUrlInput('');
+      setContent(prev => prev + '\n' + `<yotube src="${youtubeVideoUrl}">` + '\n');
+    } else {
+      alert('is not valid youtube url.');
+    }
+  };
 
   const handleFileChange = (event) => {
     const newFiles = Array.from(event.target.files);
@@ -180,6 +239,9 @@ const PostEditor = ({ onPostCreated, selectedPost }) => {
       const formData = new FormData();
       formData.append('title', title);
       formData.append('content', content);
+      if (youtubeVideoUrl) {
+        formData.append('youtubeVideoUrl', youtubeVideoUrl);
+      }
       console.log('contentFiles', contentFiles);
       // UUID가 있는 파일들만 contentFiles로 전송
       // const contentFiles = files.filter(file => file.uuid);
@@ -224,6 +286,7 @@ const PostEditor = ({ onPostCreated, selectedPost }) => {
         setContent('');
         setFiles([]);
         setContentFiles([]);
+        setYoutubeVideoUrl('');
         onPostCreated();
       } else {
         throw new Error(response.data.error || 'An error occurred while creating the post.');
@@ -243,6 +306,7 @@ const PostEditor = ({ onPostCreated, selectedPost }) => {
       setFiles(selectedPost.files || []);
       // selectedPost.files가 이미 base64 미리보기 URL을 포함하고 있을 수 있으므로 처리
       setContentFiles(selectedPost.files || []);
+      setYoutubeVideoUrl(selectedPost.youtubeVideoUrl || '');
     }
   }, [selectedPost]);
 
@@ -309,6 +373,16 @@ const PostEditor = ({ onPostCreated, selectedPost }) => {
                 Insert Video
               </Button>
             </label>
+
+            <Button
+              variant="outlined"
+              component="span"
+              startIcon={<VideoLibraryIcon />}
+              size="small"
+              onClick={handleOpenYouTubeDialog}
+            >
+              Insert Youtube Video
+            </Button>
           </Box>
         </Box>
 
@@ -334,6 +408,33 @@ const PostEditor = ({ onPostCreated, selectedPost }) => {
           <Typography variant="caption" color="primary" sx={{ mt: 1, display: 'block' }}>
             파일을 여기에 드롭하여 삽입하세요
           </Typography>
+        )}
+
+        {/* YouTube 비디오 정보 표시 */}
+        {youtubeVideoUrl && (
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+            <iframe
+              width="560"
+              height="315"
+              src={`${youtubeVideoUrl}`}
+              frameborder="0"
+              allowfullscreen>
+            </iframe>
+            <Typography variant="subtitle2" gutterBottom>
+              YouTube Video:
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {youtubeVideoUrl}
+            </Typography>
+            <Button
+              size="small"
+              color="error"
+              onClick={() => setYoutubeVideoUrl('')}
+              sx={{ mt: 1 }}
+            >
+              제거
+            </Button>
+          </Box>
         )}
 
         {contentFiles.length > 0 && (
@@ -467,6 +568,42 @@ const PostEditor = ({ onPostCreated, selectedPost }) => {
           </Button>
         </Box>
       </form>
+
+      {/* YouTube URL 입력 팝업창 */}
+      <Dialog
+        open={youtubeDialogOpen}
+        onClose={handleCloseYouTubeDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>YouTube 비디오 URL 입력</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="YouTube URL"
+            placeholder="https://www.youtube.com/watch?v=..."
+            fullWidth
+            variant="outlined"
+            value={youtubeUrlInput}
+            onChange={(e) => setYoutubeUrlInput(e.target.value)}
+            sx={{ mt: 2 }}
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            지원되는 URL 형식: youtube.com/watch?v=..., youtu.be/..., youtube.com/embed/...
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseYouTubeDialog}>취소</Button>
+          <Button
+            onClick={handleConfirmYouTubeUrl}
+            variant="contained"
+            disabled={!youtubeUrlInput.trim()}
+          >
+            확인
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 };

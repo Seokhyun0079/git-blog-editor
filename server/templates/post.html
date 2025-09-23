@@ -147,7 +147,7 @@
             throw new Error("Post ID not found");
           }
 
-          const response = await fetch(`./posts/${postId}`);
+          const response = await fetch(`./posts/${postId}?time=${Date.now()}`);
           const post = await response.json();
 
           document.title = post.title;
@@ -184,6 +184,7 @@
           // UUID 태그를 실제 미디어로 변환
           let processedContent = post.content;
 
+          console.log("processedContent", processedContent);
           // contentFiles가 있으면 UUID를 실제 파일 경로로 매핑
           if (post.contentFiles && post.contentFiles.length > 0) {
             const uuidToFileMap = {};
@@ -217,8 +218,17 @@
               }
             );
           }
+          processedContent = processedContent.replace(
+            /<yotube src="([^"]+)"[^>]*>/g,
+            (match, youtubeVideoUrl) => {
+              console.log("youtubeVideoUrl", youtubeVideoUrl);
+              console.log("match", match);
+              return `<iframe src="${youtubeVideoUrl}" frameborder="0" allowfullscreen title="${youtubeVideoUrl}" width="100%" height="500px"></iframe>`;
+            }
+          );
 
           content.innerHTML = processedContent.replace(/\n/g, "<br>");
+          console.log("processedContent", processedContent);
           postContent.appendChild(content);
         } catch (error) {
           console.error("Error loading post:", error);

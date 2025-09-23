@@ -165,7 +165,7 @@
 
               const postElement = document.createElement("a");
               postElement.className = "post";
-              postElement.href = `./post.html?id=${postFile}`;
+              postElement.href = `./post.html?id=${postFile}&time=${Date.now()}`;
 
               let imageHtml = "";
               if (post.files && post.files.length > 0) {
