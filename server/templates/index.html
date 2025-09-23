@@ -157,7 +157,7 @@
           const metaResponse = await fetch("./posts/meta.json");
           const meta = await metaResponse.json();
           const postsContainer = document.getElementById("posts");
-
+          console.log(meta.posts);
           for (const postFile of meta.posts) {
             try {
               const postResponse = await fetch(`./posts/${postFile}`);
