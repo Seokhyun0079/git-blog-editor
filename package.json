@@ -4,10 +4,14 @@
   "description": "GitHub-based blog editor",
   "main": "server/index.js",
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "nodemon server/index.js",
+    "start": "node server/index.ts",
+    "start:ts": "ts-node server/index.ts",
+    "dev": "nodemon server/index.ts",
+    "dev:ts": "nodemon --exec ts-node server/index.ts",
+    "build": "tsc",
     "client": "cd client && npm start",
-    "dev:full": "concurrently \"npm run dev\" \"npm run client\""
+    "dev:full": "concurrently \"npm run dev\" \"npm run client\"",
+    "dev:full:ts": "concurrently \"npm run dev:ts\" \"npm run client\""
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -18,7 +22,13 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^24.7.1",
     "concurrently": "^8.2.2",
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.1.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   }
 }
