@@ -29,6 +29,7 @@ import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import ImageIcon from "@mui/icons-material/Image";
 import VideoLibraryIcon from "@mui/icons-material/VideoLibrary";
 import axios from "axios";
+import { POST_STATUS } from "./postContst";
 
 interface PostFile {
   id?: string;
@@ -37,7 +38,7 @@ interface PostFile {
   size?: number;
   uuid?: string;
   type?: string;
-  previewUrl?: string;
+  status?: string;
 }
 
 interface Post {
@@ -48,6 +49,7 @@ interface Post {
   files?: PostFile[];
   contentFiles?: PostFile[];
   youtubeVideoUrl?: string;
+  status?: string;
 }
 
 interface PostEditorProps {
@@ -58,8 +60,9 @@ interface PostEditorProps {
 // Type that adds additional properties to File type (using intersection type)
 type FileWithUuid = File & {
   uuid?: string;
+  url?: string;
   type?: string;
-  previewUrl?: string;
+  status?: string;
 };
 
 // Extract file extension from filename
@@ -151,9 +154,9 @@ const PostEditor: React.FC<PostEditorProps> = ({
     event: ChangeEvent<HTMLInputElement>
   ): void => {
     const files = Array.from(event.target.files || []);
+
     files.forEach((file) => {
       const uuid = crypto.randomUUID();
-
       // Check actual MIME type to set accurate type
       let actualType = "image";
       if (file.type.startsWith("video/")) {
@@ -170,10 +173,11 @@ const PostEditor: React.FC<PostEditorProps> = ({
       setContent((prev) => prev + "\n" + tag + "\n");
 
       // Add UUID property to file
-      const fileWithUuid = Object.assign(file, {
+      const fileWithUuid = Object.assign({}, file, {
         uuid: uuid,
         type: actualType,
         name: uuid + getFileExtension(event.target.value),
+        status: POST_STATUS.DRAFT,
       }) as FileWithUuid;
 
       setFiles((prev) => [...prev, fileWithUuid]);
@@ -181,8 +185,8 @@ const PostEditor: React.FC<PostEditorProps> = ({
       // Convert to base64 for preview caching
       const reader = new FileReader();
       reader.onload = (e) => {
-        const previewFile = Object.assign(fileWithUuid, {
-          previewUrl: e.target?.result as string,
+        const previewFile = Object.assign({}, fileWithUuid, {
+          url: e.target?.result as string,
         }) as FileWithUuid;
         console.log("previewFile", previewFile);
         setContentFiles((prev) => [...prev, previewFile]);
@@ -192,7 +196,8 @@ const PostEditor: React.FC<PostEditorProps> = ({
   };
 
   const handleRemoveContentFile = (index: number): void => {
-    const fileToRemove = files[index];
+    const fileToRemove = contentFiles[index];
+    console.log("fileToRemove", fileToRemove);
     if (fileToRemove.uuid) {
       // Remove UUID tag from content
       const tagToRemove =
@@ -231,7 +236,7 @@ const PostEditor: React.FC<PostEditorProps> = ({
         const tag = `<img src="${uuid}"/>`;
         setContent((prev) => prev + "\n" + tag + "\n");
 
-        const fileWithUuid = Object.assign(file, {
+        const fileWithUuid = Object.assign({}, file, {
           uuid: uuid,
           type: "image",
         }) as FileWithUuid;
@@ -240,8 +245,8 @@ const PostEditor: React.FC<PostEditorProps> = ({
         // Convert to base64 for preview caching
         const reader = new FileReader();
         reader.onload = (e) => {
-          const previewFile = Object.assign(fileWithUuid, {
-            previewUrl: e.target?.result as string,
+          const previewFile = Object.assign({}, fileWithUuid, {
+            url: e.target?.result as string,
           }) as FileWithUuid;
           setContentFiles((prev) => [...prev, previewFile]);
         };
@@ -251,7 +256,7 @@ const PostEditor: React.FC<PostEditorProps> = ({
         const tag = `<video src="${uuid}"/>`;
         setContent((prev) => prev + "\n" + tag + "\n");
 
-        const fileWithUuid = Object.assign(file, {
+        const fileWithUuid = Object.assign({}, file, {
           uuid: uuid,
           type: "video",
         }) as FileWithUuid;
@@ -260,8 +265,8 @@ const PostEditor: React.FC<PostEditorProps> = ({
         // Convert to base64 for preview caching
         const reader = new FileReader();
         reader.onload = (e) => {
-          const previewFile = Object.assign(fileWithUuid, {
-            previewUrl: e.target?.result as string,
+          const previewFile = Object.assign({}, fileWithUuid, {
+            url: e.target?.result as string,
           }) as FileWithUuid;
           setContentFiles((prev) => [...prev, previewFile]);
         };
@@ -286,13 +291,12 @@ const PostEditor: React.FC<PostEditorProps> = ({
       }
       console.log("contentFiles", contentFiles);
       // Send only files with UUID as contentFiles
-      // const contentFiles = files.filter(file => file.uuid);
       const attachedFiles = files.filter((file) => !file.uuid);
       if (contentFiles.length > 0) {
         const contentFilesForUpload = contentFiles.map((file) => {
           return {
             name: file.name,
-            base64: file.previewUrl,
+            base64: file.url,
             uuid: file.uuid,
             type: file.type,
           };
@@ -365,8 +369,6 @@ const PostEditor: React.FC<PostEditorProps> = ({
     }
   }, [selectedPost]);
 
-  // Files with UUID (media inserted in content)
-  const contentFilesWithUuid = files.filter((file) => file.uuid);
   // Files without UUID (regular attachments)
   const attachedFiles = files.filter((file) => !file.uuid);
 
@@ -516,7 +518,7 @@ const PostEditor: React.FC<PostEditorProps> = ({
             >
               {contentFiles.map((file, index) => {
                 // Use cached base64 preview URL
-                const fileUrl = file.previewUrl || "";
+                const fileUrl = file.url || "";
 
                 // Check file type more accurately
                 const isImage =
