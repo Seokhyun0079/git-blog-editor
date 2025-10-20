@@ -11,6 +11,7 @@ import {
 import PostEditor from "./components/PostEditor";
 import PostList from "./components/PostList";
 import axios from "axios";
+import { FILE_STATUS } from "./components/postContst";
 
 interface Post {
   id: string;
@@ -21,6 +22,13 @@ interface Post {
     id: string;
     name: string;
     url: string;
+  }>;
+  contentFiles?: Array<{
+    id: string;
+    name: string;
+    url: string;
+    uuid: string;
+    status?: string;
   }>;
 }
 
@@ -60,6 +68,12 @@ function App() {
   };
 
   const handlePostClick = (post: Post): void => {
+    post.contentFiles = post.contentFiles?.map((contentFile) => {
+      return {
+        ...contentFile,
+        status: FILE_STATUS.UPLOADED,
+      };
+    });
     setSelectedPost(post);
     setShowEditor(true);
   };
@@ -106,4 +120,3 @@ function App() {
 }
 
 export default App;
-

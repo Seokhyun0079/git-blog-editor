@@ -1,5 +1,4 @@
-export const POST_STATUS = {
+export const FILE_STATUS = {
   DRAFT: "DRAFT",
   UPLOADED: "UPLOADED",
-
 }; 

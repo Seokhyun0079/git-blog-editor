@@ -29,7 +29,7 @@ import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import ImageIcon from "@mui/icons-material/Image";
 import VideoLibraryIcon from "@mui/icons-material/VideoLibrary";
 import axios from "axios";
-import { POST_STATUS } from "./postContst";
+import { FILE_STATUS } from "./postContst";
 
 interface PostFile {
   id?: string;
@@ -177,7 +177,7 @@ const PostEditor: React.FC<PostEditorProps> = ({
         uuid: uuid,
         type: actualType,
         name: uuid + getFileExtension(event.target.value),
-        status: POST_STATUS.DRAFT,
+        status: FILE_STATUS.DRAFT,
       }) as FileWithUuid;
 
       setFiles((prev) => [...prev, fileWithUuid]);
@@ -197,7 +197,11 @@ const PostEditor: React.FC<PostEditorProps> = ({
 
   const handleRemoveContentFile = (index: number): void => {
     const fileToRemove = contentFiles[index];
-    console.log("fileToRemove", fileToRemove);
+
+    // Update the file marked for deletion in the original array
+    setContentFiles((prev) =>
+      prev.map((file, i) => (i === index ? fileToRemove : file))
+    );
     if (fileToRemove.uuid) {
       // Remove UUID tag from content
       const tagToRemove =
@@ -299,6 +303,7 @@ const PostEditor: React.FC<PostEditorProps> = ({
             base64: file.url,
             uuid: file.uuid,
             type: file.type,
+            status: file.status,
           };
         });
         formData.append("contentFiles", JSON.stringify(contentFilesForUpload));
@@ -359,7 +364,6 @@ const PostEditor: React.FC<PostEditorProps> = ({
 
   useEffect(() => {
     if (selectedPost) {
-      console.log("selectedPost", selectedPost);
       setTitle(selectedPost.title);
       setContent(selectedPost.content);
       setFiles((selectedPost.files || []) as FileWithUuid[]);
