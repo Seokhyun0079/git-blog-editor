@@ -5,6 +5,7 @@ import { Octokit } from 'octokit';
 import fs from 'fs/promises';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { FILE_STATUS, MediaFile, FileStatus } from './file';
 import {
   deleteFile,
   createOrUpdateFile,
@@ -590,7 +591,7 @@ app.put('/api/posts/:id', upload.array('files'), async (req: Request, res: Respo
     const { id } = req.params;
     const { title, content } = req.body;
     const files = (req.files as Express.Multer.File[]) || [];
-    const contentFiles: ContentFileUpload[] = req.body.contentFiles ? JSON.parse(req.body.contentFiles) : [];
+    const contentFiles: MediaFile[] = req.body.contentFiles ? JSON.parse(req.body.contentFiles) : [];
 
     // Get post file
     const postContent = await getContent(`posts/${id}.json`);
@@ -614,8 +615,8 @@ app.put('/api/posts/:id', upload.array('files'), async (req: Request, res: Respo
     }
 
     // Find contentFiles to delete (exist in GitHub but not in new contentFiles)
-    const contentFilesToDelete = existingContentFiles.filter((existingFile: any) =>
-      !newContentFiles.some((newFile: any) => newFile.uuid === existingFile.uuid)
+    const contentFilesToDelete = existingContentFiles.filter((existingFile: MediaFile) =>
+      !newContentFiles.some((newFile: MediaFile) => newFile.uuid === existingFile.uuid)
     );
 
     // Delete contentFiles that are no longer needed
@@ -649,10 +650,12 @@ app.put('/api/posts/:id', upload.array('files'), async (req: Request, res: Respo
       url: string;
       uuid: string;
       type: string;
+      status: FileStatus;
     }> = [];
 
+    let replacedContent = content;
     for (const file of contentFiles) {
-      console.log('Processing contentFile in PUT:', file); // Debug log
+      console.log('Processing contentFile in PUT:', file.name); // Debug log
 
       // Handle case when file.name is missing
       if (!file.name) {
@@ -666,8 +669,8 @@ app.put('/api/posts/:id', upload.array('files'), async (req: Request, res: Respo
         base64Content = base64Content.split(',')[1];
       }
 
-      if (!base64Content) {
-        console.log('Skipping file without base64 content in PUT:', file);
+      if (!base64Content || file.status === FILE_STATUS.UPLOADED) {
+        console.log('Skipping file without base64 content in PUT:', file.name);
         continue;
       }
 
@@ -678,8 +681,11 @@ app.put('/api/posts/:id', upload.array('files'), async (req: Request, res: Respo
         name: file.name,
         url: `https://raw.githubusercontent.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/main/${contentFilePath}`,
         uuid: file.uuid, // Preserve UUID
-        type: file.type // Preserve file type
+        type: file.type, // Preserve file type
+        status: file.status
       });
+      //TODO: Refactor this to use a more efficient method
+      replacedContent = replacedContent.replaceAll(file.uuid, `https://raw.githubusercontent.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/main/${contentFilePath}`);
     }
 
     // Upload new files
@@ -722,7 +728,7 @@ app.put('/api/posts/:id', upload.array('files'), async (req: Request, res: Respo
     const updatedPostData: PostData = {
       ...postContent.content,
       title,
-      content,
+      content: replacedContent,
       updatedAt: new Date().toISOString(),
       files: finalFiles,
       contentFiles: finalContentFiles // UUID-based media files
