@@ -9,9 +9,9 @@ import {
   CircularProgress,
 } from "@mui/material";
 import PostEditor from "./components/PostEditor";
-import PostList from "./components/PostList";
+import PostList from "./components/list/PostList";
 import axios from "axios";
-import { FILE_STATUS } from "./components/postContst";
+import { FILE_STATUS } from "./type/File";
 
 interface Post {
   id: string;
