@@ -87,11 +87,12 @@ interface ContentFileUpload {
 
 // Function to create or update template file with retry logic
 async function createOrUpdateTemplate(filename: string, maxRetries = 3): Promise<void> {
+  // Retry logic for creating or updating template file
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       let currentSha: string | null = null;
       let needsUpdate = true;
-      const templateContent = await readTemplate(filename);
+      const templateContent: string = await readTemplate(filename);
 
       // Check if file exists and get current SHA
       try {
@@ -154,76 +155,6 @@ async function createOrUpdateTemplate(filename: string, maxRetries = 3): Promise
   }
 }
 
-// Function to create or update README.md with retry logic
-async function createOrUpdateReadme(maxRetries = 3): Promise<void> {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      let currentSha: string | null = null;
-      let needsUpdate = true;
-
-      const readmeContent = await readTemplate('README.md');
-
-      // Check if README.md exists
-      try {
-        const response = await octokit.rest.repos.getContent({
-          owner: process.env.GITHUB_OWNER!,
-          repo: process.env.GITHUB_REPO!,
-          path: 'README.md'
-        });
-
-        // Compare content if file exists
-        if ('content' in response.data && 'sha' in response.data) {
-          const currentContent = Buffer.from(response.data.content, 'base64').toString();
-          if (currentContent === readmeContent) {
-            console.log('README.md is up to date');
-            needsUpdate = false;
-          } else {
-            console.log('README.md needs update');
-            currentSha = response.data.sha;
-          }
-        }
-      } catch (error: any) {
-        if (error.status === 404) {
-          console.log('README.md does not exist. Creating new file.');
-        } else {
-          throw error;
-        }
-      }
-
-      // Create or update file if needed
-      if (needsUpdate) {
-        await octokit.rest.repos.createOrUpdateFileContents({
-          owner: process.env.GITHUB_OWNER!,
-          repo: process.env.GITHUB_REPO!,
-          path: 'README.md',
-          message: currentSha ? 'Update README.md' : 'Create README.md',
-          content: Buffer.from(readmeContent).toString('base64'),
-          branch: 'main',
-          ...(currentSha && { sha: currentSha })
-        });
-        console.log(currentSha ? 'README.md has been updated' : 'README.md has been created');
-      }
-
-      // Exit loop on successful completion
-      return;
-
-    } catch (error: any) {
-      if (error.status === 409 && attempt < maxRetries) {
-        console.log(`README.md SHA mismatch (attempt ${attempt}/${maxRetries}). Retrying...`);
-        // Wait before retrying
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-        continue;
-      } else {
-        console.error(`Error checking/creating/updating README.md (attempt ${attempt}):`, error);
-        if (attempt === maxRetries) {
-          console.error(`Failed to update README.md after ${maxRetries} attempts`);
-        }
-        throw error;
-      }
-    }
-  }
-}
-
 // Initialize templates and README on server start
 async function initializeFiles(): Promise<void> {
   try {
@@ -263,16 +194,15 @@ async function initializeFiles(): Promise<void> {
       }
     }
 
-    // Process template files sequentially (prevent concurrency issues)
-    console.log('Updating index.html...');
-    await createOrUpdateTemplate('index.html');
-
-    console.log('Updating post.html...');
-    await createOrUpdateTemplate('post.html');
-
-    console.log('Updating README.md...');
-    await createOrUpdateReadme();
-
+    // List template files
+    console.log('=== Templates folder files ===');
+    const templatesPath = path.join(__dirname, 'templates');
+    const files: string[] = await fs.readdir(templatesPath);
+    files.forEach(async (file: string) => {
+      console.log(`Updating ${file}...`);
+      await createOrUpdateTemplate(file);
+    });
+    console.log('============================')
     console.log('File initialization completed successfully');
   } catch (error) {
     console.error('Error initializing files:', error);
