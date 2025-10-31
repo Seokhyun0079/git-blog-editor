@@ -125,6 +125,12 @@
           grid-template-columns: 1fr;
         }
       }
+      .image-in-post {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.3s ease;
+      }
     </style>
   </head>
   <body>
@@ -136,7 +142,7 @@
     <div class="container">
       <article id="post-content" class="post"></article>
     </div>
-
+    <script src="./utills.js"></script>
     <script>
       async function loadPost() {
         try {
@@ -195,15 +201,9 @@
             });
 
             // img 태그 변환
-            processedContent = processedContent.replace(
-              /<img src="([^"]+)"/g,
-              (match, uuid) => {
-                const file = uuidToFileMap[uuid];
-                if (file && file.name) {
-                  return `<img src="./images/${file.name}" alt="${file.name}" style="max-width: 100%; height: auto; border-radius: 8px; margin: 1rem 0;">`;
-                }
-                return match; // 매핑되지 않은 경우 원본 유지
-              }
+            processedContent = addClassToImages(
+              processedContent,
+              "image-in-post"
             );
 
             // video 태그 변환
@@ -218,6 +218,7 @@
               }
             );
           }
+
           processedContent = processedContent.replace(
             /<yotube src="([^"]+)"[^>]*>/g,
             (match, youtubeVideoUrl) => {
