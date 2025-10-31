@@ -198,10 +198,10 @@ async function initializeFiles(): Promise<void> {
     console.log('=== Templates folder files ===');
     const templatesPath = path.join(__dirname, 'templates');
     const files: string[] = await fs.readdir(templatesPath);
-    files.forEach(async (file: string) => {
+    for (const file of files) {
       console.log(`Updating ${file}...`);
       await createOrUpdateTemplate(file);
-    });
+    }
     console.log('============================')
     console.log('File initialization completed successfully');
   } catch (error) {
