@@ -29,7 +29,7 @@ import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import ImageIcon from "@mui/icons-material/Image";
 import VideoLibraryIcon from "@mui/icons-material/VideoLibrary";
 import axios from "axios";
-import { FILE_STATUS } from "./postContst";
+import { FILE_STATUS } from "../type/File";
 
 interface PostFile {
   id?: string;
@@ -129,13 +129,11 @@ const PostEditor: React.FC<PostEditorProps> = ({
   const handleConfirmYouTubeUrl = (): void => {
     const videoId = isValidYouTubeUrl(youtubeUrlInput);
     if (!!videoId) {
-      const youtubeVideoUrl = "https://www.youtube.com/embed/" + videoId;
+      const youtubeVideoUrl = `https://www.youtube.com/embed/${videoId}`;
       setYoutubeVideoUrl(youtubeVideoUrl);
       setYoutubeDialogOpen(false);
       setYoutubeUrlInput("");
-      setContent(
-        (prev) => prev + "\n" + `<yotube src="${youtubeVideoUrl}">` + "\n"
-      );
+      setContent((prev) => prev + `\n<youtube src="${youtubeVideoUrl}">\n`);
     } else {
       alert("is not valid youtube url.");
     }
@@ -481,10 +479,10 @@ const PostEditor: React.FC<PostEditorProps> = ({
         {youtubeVideoUrl && (
           <Box sx={{ mt: 2, p: 2, bgcolor: "grey.50", borderRadius: 1 }}>
             <iframe
+              title={youtubeVideoUrl}
               width="560"
               height="315"
               src={`${youtubeVideoUrl}`}
-              frameBorder="0"
               allowFullScreen
             ></iframe>
             <Typography variant="subtitle2" gutterBottom>
