@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Container,
   Typography,
@@ -37,10 +37,38 @@ function App() {
   const [loading, setLoading] = useState<boolean>(true);
   const [showEditor, setShowEditor] = useState<boolean>(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const showEditorRef = useRef(showEditor);
 
+  // Mount: fetch posts and setup back button listener
   useEffect(() => {
     fetchPosts();
+
+    // Detect browser back button
+    const handlePopState = () => {
+      // When back button is pressed
+      if (showEditorRef.current) {
+        setShowEditor(false);
+        setSelectedPost(null);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
   }, []);
+
+  // Handle editor state changes
+  useEffect(() => {
+    // Sync showEditor state to ref
+    showEditorRef.current = showEditor;
+
+    // Add state to history when navigating to editor
+    if (showEditor) {
+      window.history.pushState({ showEditor: true }, "", window.location.href);
+    }
+  }, [showEditor]);
 
   const fetchPosts = async (): Promise<void> => {
     try {
