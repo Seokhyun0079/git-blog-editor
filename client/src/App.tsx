@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import  { useState, useEffect, useRef } from "react";
 import {
   Container,
   Typography,
@@ -72,7 +72,8 @@ function App() {
 
   const fetchPosts = async (): Promise<void> => {
     try {
-      const response = await axios.get("http://localhost:5000/api/posts");
+      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:5000";
+      const response = await axios.get(`${apiUrl}/api/posts`);
       setPosts(
         response.data.data.sort(
           (a: Post, b: Post) =>

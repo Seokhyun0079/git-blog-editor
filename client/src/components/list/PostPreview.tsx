@@ -47,7 +47,8 @@ const PostPreivew = ({ post, onPostClick, onDelete }: PostPreivewProps) => {
 
   const handleDeletePost = async (id: string): Promise<void> => {
     try {
-      await axios.delete(`http://localhost:5000/api/posts/${id}`);
+      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:5000";
+      await axios.delete(`${apiUrl}/api/posts/${id}`);
       onDelete(id);
     } catch (error) {
       console.error("Error deleting post:", error);
