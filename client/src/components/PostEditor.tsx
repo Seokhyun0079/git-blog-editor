@@ -313,10 +313,12 @@ const PostEditor: React.FC<PostEditorProps> = ({
 
       let response;
 
+      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:5000";
+      
       if (selectedPost) {
         formData.append("id", selectedPost.id);
         response = await axios.put(
-          `http://localhost:5000/api/posts/${selectedPost.id}`,
+          `${apiUrl}/api/posts/${selectedPost.id}`,
           formData,
           {
             headers: {
@@ -326,7 +328,7 @@ const PostEditor: React.FC<PostEditorProps> = ({
         );
       } else {
         response = await axios.post(
-          "http://localhost:5000/api/posts",
+          `${apiUrl}/api/posts`,
           formData,
           {
             headers: {

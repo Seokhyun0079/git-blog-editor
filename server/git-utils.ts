@@ -1,7 +1,8 @@
 import { Octokit } from 'octokit';
 import dotenv from 'dotenv';
+import path from 'path';
 
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 // Create Octokit instance for GitHub authentication
 const octokit = new Octokit({

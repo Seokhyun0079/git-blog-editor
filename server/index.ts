@@ -16,7 +16,8 @@ import {
 } from './git-utils';
 import dotenv from 'dotenv';
 
-dotenv.config();
+// Load .env from server directory
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 // Log environment variables
 console.log('=== Environment Variables ===');
@@ -473,6 +474,7 @@ app.post('/api/posts', upload.array('files'), async (req: Request, res: Response
 
 // Get blog posts endpoint
 app.get('/api/posts', async (req: Request, res: Response) => {
+  console.log('get')
   try {
     const response = await octokit.rest.repos.getContent({
       owner: process.env.GITHUB_OWNER!,
