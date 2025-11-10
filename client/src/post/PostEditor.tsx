@@ -28,8 +28,9 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import ImageIcon from "@mui/icons-material/Image";
 import VideoLibraryIcon from "@mui/icons-material/VideoLibrary";
-import axios from "axios";
 import { FILE_STATUS } from "../type/File";
+import { usePostPageContext } from "../context/PostPageContext";
+import { useLoadingContext } from "../context/LoadingContext";
 
 interface PostFile {
   id?: string;
@@ -53,7 +54,7 @@ interface Post {
 }
 
 interface PostEditorProps {
-  onPostCreated: () => void;
+  show: boolean;
   selectedPost: Post | null;
 }
 
@@ -85,10 +86,13 @@ const isValidYouTubeUrl = (url: string): string | null => {
   return videoId;
 };
 
-const PostEditor: React.FC<PostEditorProps> = ({
-  onPostCreated,
-  selectedPost,
-}) => {
+const requestHeaders = {
+  headers: {
+    "Content-Type": "multipart/form-data",
+  },
+};
+
+const PostEditor: React.FC<PostEditorProps> = ({ show, selectedPost }) => {
   const [title, setTitle] = useState<string>("");
   const [content, setContent] = useState<string>("");
   const [files, setFiles] = useState<FileWithUuid[]>([]);
@@ -100,6 +104,8 @@ const PostEditor: React.FC<PostEditorProps> = ({
   const [youtubeVideoUrl, setYoutubeVideoUrl] = useState<string>("");
   const [youtubeDialogOpen, setYoutubeDialogOpen] = useState<boolean>(false);
   const [youtubeUrlInput, setYoutubeUrlInput] = useState<string>("");
+  const { onPostCreated } = usePostPageContext();
+  const { post, put } = useLoadingContext();
 
   // Open YouTube dialog
   const handleOpenYouTubeDialog = async (): Promise<void> => {
@@ -280,6 +286,7 @@ const PostEditor: React.FC<PostEditorProps> = ({
   const handleSubmit = async (
     event: FormEvent<HTMLFormElement>
   ): Promise<void> => {
+    console.log("handleSubmit");
     event.preventDefault();
     setLoading(true);
     setError("");
@@ -314,31 +321,19 @@ const PostEditor: React.FC<PostEditorProps> = ({
       let response;
 
       const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:5000";
-      
+
       if (selectedPost) {
         formData.append("id", selectedPost.id);
-        response = await axios.put(
+        response = await put(
           `${apiUrl}/api/posts/${selectedPost.id}`,
           formData,
-          {
-            headers: {
-              "Content-Type": "multipart/form-data",
-            },
-          }
+          requestHeaders
         );
       } else {
-        response = await axios.post(
-          `${apiUrl}/api/posts`,
-          formData,
-          {
-            headers: {
-              "Content-Type": "multipart/form-data",
-            },
-          }
-        );
+        response = await post(`${apiUrl}/api/posts`, formData, requestHeaders);
       }
 
-      if (response.data.success) {
+      if (response.success) {
         setTitle("");
         setContent("");
         setFiles([]);
@@ -347,12 +342,12 @@ const PostEditor: React.FC<PostEditorProps> = ({
         onPostCreated();
       } else {
         throw new Error(
-          response.data.error || "An error occurred while creating the post."
+          response.error || "An error occurred while creating the post."
         );
       }
     } catch (error: any) {
       setError(
-        error.response?.data?.error ||
+        error.response?.error ||
           error.message ||
           "An error occurred while creating the post."
       );
@@ -362,7 +357,7 @@ const PostEditor: React.FC<PostEditorProps> = ({
     }
   };
 
-  useEffect(() => {
+  const initializePost = () => {
     if (selectedPost) {
       setTitle(selectedPost.title);
       setContent(selectedPost.content);
@@ -370,18 +365,28 @@ const PostEditor: React.FC<PostEditorProps> = ({
       // selectedPost.files may already include base64 preview URLs
       setContentFiles((selectedPost.contentFiles || []) as FileWithUuid[]);
       setYoutubeVideoUrl(selectedPost.youtubeVideoUrl || "");
+    } else {
+      setTitle("");
+      setContent("");
+      setFiles([]);
+      setContentFiles([]);
+      setYoutubeVideoUrl("");
     }
+  };
+
+  useEffect(() => {
+    initializePost();
   }, [selectedPost]);
 
   // Files without UUID (regular attachments)
   const attachedFiles = files.filter((file) => !file.uuid);
+  if (!show) return null;
 
   return (
     <Paper elevation={3} sx={{ p: 3 }}>
       <Typography variant="h5" component="h2" gutterBottom>
         Create New Post
       </Typography>
-
       <form onSubmit={handleSubmit}>
         <TextField
           fullWidth
@@ -645,7 +650,6 @@ const PostEditor: React.FC<PostEditorProps> = ({
             variant="contained"
             color="primary"
             disabled={loading || !title || !content}
-            startIcon={loading ? <CircularProgress size={20} /> : null}
           >
             {loading ? "Saving..." : "Save"}
           </Button>

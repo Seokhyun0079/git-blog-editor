@@ -1,18 +1,14 @@
 import React from "react";
-import { List, Paper, Typography, Box } from "@mui/material";
+import { List, Typography, Box } from "@mui/material";
 import PostPreivew from "./PostPreview";
 import EmptyPage from "./EmptyPage";
 interface PostListProps {
   posts: Post[];
-  onDelete: (id: string) => void;
-  onPostClick: (post: Post) => void;
+  show: boolean;
 }
 
-const PostList: React.FC<PostListProps> = ({
-  posts,
-  onDelete,
-  onPostClick,
-}) => {
+const PostList: React.FC<PostListProps> = ({ show, posts }) => {
+  if (!show) return null;
   return (
     <Box>
       <Typography variant="h5" component="h2" gutterBottom>
@@ -23,12 +19,7 @@ const PostList: React.FC<PostListProps> = ({
       ) : (
         <List>
           {posts.map((post) => (
-            <PostPreivew
-              key={post.id}
-              post={post}
-              onPostClick={onPostClick}
-              onDelete={onDelete}
-            />
+            <PostPreivew key={post.id} post={post} />
           ))}
         </List>
       )}
