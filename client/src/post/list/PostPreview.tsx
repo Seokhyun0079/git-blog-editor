@@ -11,11 +11,10 @@ import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import PostContent from "./PostContent";
 import axios from "axios";
 import { useState } from "react";
+import { usePostPageContext } from "../../context/PostPageContext";
 
 interface PostPreivewProps {
   post: Post;
-  onPostClick: (post: Post) => void;
-  onDelete: (id: string) => void;
 }
 
 const computePrimary = (
@@ -42,23 +41,22 @@ const computePrimary = (
   );
 };
 
-const PostPreivew = ({ post, onPostClick, onDelete }: PostPreivewProps) => {
+const PostPreivew = ({ post }: PostPreivewProps) => {
+  const { onPostClicked, onPostDeleted } = usePostPageContext();
   const [open, setOpen] = useState<boolean>(false);
 
   const handleDeletePost = async (id: string): Promise<void> => {
     try {
       const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:5000";
       await axios.delete(`${apiUrl}/api/posts/${id}`);
-      onDelete(id);
+      onPostDeleted();
     } catch (error) {
       console.error("Error deleting post:", error);
     }
   };
 
   const handleOpen = () => {
-    if (onPostClick) {
-      onPostClick(post);
-    }
+    onPostClicked(post);
   };
 
   return (
