@@ -12,6 +12,7 @@ import PostContent from "./PostContent";
 import axios from "axios";
 import { useState } from "react";
 import { usePostPageContext } from "../../context/PostPageContext";
+import { Post } from "../../type/Post";
 
 interface PostPreivewProps {
   post: Post;

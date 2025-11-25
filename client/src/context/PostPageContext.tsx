@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useRef } from "react";
+import { Post } from "../type/Post";
 
 type PostPageContextType = {
   onPostCreated: () => void;

@@ -1,6 +1,6 @@
 import { Paper, Typography } from "@mui/material";
 
-const EmptyPage = () => {
+const PageEmpty = () => {
   return (
     <Paper sx={{ p: 3, textAlign: "center" }}>
       <Typography color="textSecondary">
@@ -9,4 +9,4 @@ const EmptyPage = () => {
     </Paper>
   );
 };
-export default EmptyPage;
+export default PageEmpty;

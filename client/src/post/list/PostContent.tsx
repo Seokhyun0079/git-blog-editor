@@ -1,6 +1,8 @@
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
 import { Typography, Box, Chip } from "@mui/material";
 import { ReactElement } from "react";
+import { Post } from "../../type/Post";
+import { PostFile } from "../../type/File";
 
 const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString("en-US", {
@@ -91,7 +93,7 @@ const PostContent = ({ post }: { post: Post }) => {
       </Typography>
       {post.files && post.files.length > 0 && (
         <Box sx={{ mt: 1 }}>
-          {post.files.map((file, fileIndex) => (
+          {post.files.map((file: PostFile, fileIndex: number) => (
             <Chip
               key={fileIndex}
               icon={<InsertDriveFileIcon />}

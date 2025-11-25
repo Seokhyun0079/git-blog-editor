@@ -1,9 +1,9 @@
 import { Box, CircularProgress } from "@mui/material";
-import "./loading.scss";
+import styles from "./Loading.module.scss";
 const Loading = ({ show }: { show: boolean }) => {
   if (!show) return null;
   return (
-    <Box className="loading-container">
+    <Box className={styles.loadingContainer}>
       <CircularProgress />
     </Box>
   );

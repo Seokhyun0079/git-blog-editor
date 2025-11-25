@@ -1,13 +1,10 @@
 import React from "react";
 import { List, Typography, Box } from "@mui/material";
-import PostPreivew from "./PostPreview";
-import EmptyPage from "./EmptyPage";
-interface PostListProps {
-  posts: Post[];
-  show: boolean;
-}
+import PostPreivew from "./list/PostPreview";
+import PageEmpty from "./list/PageEmpty";
+import { PostListProps } from "./Props";
 
-const PostList: React.FC<PostListProps> = ({ show, posts }) => {
+const PostList = ({ show, posts }: PostListProps) => {
   if (!show) return null;
   return (
     <Box>
@@ -15,7 +12,7 @@ const PostList: React.FC<PostListProps> = ({ show, posts }) => {
         Blog Posts
       </Typography>
       {posts.length === 0 ? (
-        <EmptyPage />
+        <PageEmpty />
       ) : (
         <List>
           {posts.map((post) => (

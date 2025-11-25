@@ -5,16 +5,18 @@ import { Octokit } from "octokit";
 import fs from "fs/promises";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
-import { FILE_STATUS, MediaFile, FileStatus } from "./file";
+import { FILE_STATUS, MediaFile, PostFile } from "./type/File";
 import {
   deleteFile,
   createOrUpdateFile,
   getContent,
   createImageFile,
-  getFile,
   createContentFile,
+  deleteFiles,
 } from "./git-utils";
 import dotenv from "dotenv";
+import { PostData } from "./type/Post";
+import { convertPostReqToPostData } from "./type/TypeConverter";
 
 // Load .env from server directory
 dotenv.config({ path: path.join(__dirname, ".env") });
@@ -31,7 +33,13 @@ const app = express();
 
 // Configure multer for memory storage
 const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 1024 * 1024 * 1024 * 2,
+    fieldSize: 1024 * 1024 * 1024 * 2,
+  },
+});
 
 app.use(cors());
 app.use(express.json());
@@ -59,30 +67,10 @@ interface MetaContent {
   posts: string[];
 }
 
-interface PostData {
-  id: string;
-  title: string;
-  content: string;
-  createdAt: string;
-  files?: Array<{
-    id: string;
-    name: string;
-    url: string;
-  }>;
-  contentFiles?: Array<{
-    id: string;
-    name: string;
-    url: string;
-    uuid: string;
-    type: string;
-  }>;
-  updatedAt?: string;
-}
-
 interface ContentFileUpload {
+  id: string;
   name: string;
   base64: string;
-  uuid: string;
   type: string;
 }
 
@@ -285,104 +273,8 @@ async function updateMetaJson(newPostFile: string): Promise<void> {
   }
 }
 
-// Function to create or update index.html
-async function createOrUpdateIndexHtml(filename: string): Promise<void> {
-  try {
-    let currentSha: string | null = null;
-    let needsUpdate = true;
-    const templateContent = await readTemplate(filename);
-
-    // Check if index.html exists
-    try {
-      const response = await octokit.rest.repos.getContent({
-        owner: process.env.GITHUB_OWNER!,
-        repo: process.env.GITHUB_REPO!,
-        path: "index.html",
-      });
-
-      // Compare content if file exists
-      if ("content" in response.data && "sha" in response.data) {
-        const currentContent = Buffer.from(
-          response.data.content,
-          "base64"
-        ).toString();
-        if (currentContent === templateContent) {
-          console.log(`${filename} is up to date`);
-          needsUpdate = false;
-        } else {
-          console.log(`${filename} needs update`);
-          currentSha = response.data.sha;
-        }
-      }
-    } catch (error: any) {
-      if (error.status === 404) {
-        console.log(`${filename} does not exist. Creating new file.`);
-      } else {
-        throw error;
-      }
-    }
-
-    // Create or update file if needed
-    if (needsUpdate) {
-      await octokit.rest.repos.createOrUpdateFileContents({
-        owner: process.env.GITHUB_OWNER!,
-        repo: process.env.GITHUB_REPO!,
-        path: filename,
-        message: currentSha ? `Update ${filename}` : `Create ${filename}`,
-        content: Buffer.from(templateContent).toString("base64"),
-        branch: "main",
-        ...(currentSha && { sha: currentSha }),
-      });
-      console.log(
-        currentSha
-          ? "index.html has been updated"
-          : "index.html has been created"
-      );
-    }
-  } catch (error) {
-    console.error(`Error checking/creating/updating ${filename}:`, error);
-  }
-}
-
-// Upload images endpoint
-app.post(
-  "/api/upload",
-  upload.array("images"),
-  async (req: Request, res: Response) => {
-    try {
-      const files = req.files as Express.Multer.File[];
-      const uploadedFiles: Array<{ name: string; url: string }> = [];
-
-      for (const file of files) {
-        const imagePath = `images/${file.originalname}`;
-
-        // Upload image to GitHub
-        const response = await octokit.rest.repos.createOrUpdateFileContents({
-          owner: process.env.GITHUB_OWNER!,
-          repo: process.env.GITHUB_REPO!,
-          path: imagePath,
-          message: `Upload image: ${file.originalname}`,
-          content: file.buffer.toString("base64"),
-          branch: "main",
-        });
-
-        if (response.data.content) {
-          uploadedFiles.push({
-            name: file.originalname,
-            url: response.data.content.html_url || "",
-          });
-        }
-      }
-
-      res.json({ success: true, files: uploadedFiles });
-    } catch (error: any) {
-      console.error("Error uploading images:", error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  }
-);
-
 app.delete("/api/posts/:id", async (req: Request, res: Response) => {
+  console.log("delete post");
   try {
     const { id } = req.params;
 
@@ -393,12 +285,7 @@ app.delete("/api/posts/:id", async (req: Request, res: Response) => {
 
     // Delete attached files
     if (postContent.content.files && postContent.content.files.length > 0) {
-      for (const file of postContent.content.files) {
-        const filePath = file.url.split("/main/")[1];
-        console.log("Deleting file:", filePath);
-        const fileResponse = await getFile(filePath);
-        await deleteFile(filePath, fileResponse.sha);
-      }
+      await deleteFiles(postContent.content.files);
     }
 
     // Delete post file
@@ -419,6 +306,7 @@ app.delete("/api/posts/:id", async (req: Request, res: Response) => {
     console.error("Error deleting post:", error);
     res.status(500).json({ success: false, error: error.message });
   }
+  console.log("post deleted");
 });
 
 // Create blog post endpoint
@@ -441,16 +329,12 @@ app.post(
         id: string;
         name: string;
         url: string;
-        uuid: string;
         type: string;
       }> = [];
 
       for (const file of contentFiles) {
-        console.log("Processing contentFile:", file); // Debug log
-
         // Extract actual base64 part if data is in data:image/... format
         let base64Content = file.base64;
-        console.log("base64Content", base64Content);
         if (base64Content && base64Content.includes(",")) {
           base64Content = base64Content.split(",")[1];
         }
@@ -461,26 +345,21 @@ app.post(
         }
 
         const contentFilePath = `content/${file.name}`;
-        await createContentFile(contentFilePath, file.uuid, base64Content);
+        await createContentFile(contentFilePath, file.id, base64Content);
         uploadedContentFiles.push({
-          id: file.uuid,
+          id: file.id,
           name: file.name,
           url: `https://raw.githubusercontent.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/main/${contentFilePath}`,
-          uuid: file.uuid, // Preserve UUID
           type: file.type, // Preserve file type
         });
         replacedContent = replacedContent.replaceAll(
-          file.uuid,
+          file.id,
           `https://raw.githubusercontent.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/main/${contentFilePath}`
         );
       }
 
       // Upload regular attached files to GitHub
-      const uploadedFiles: Array<{
-        id: string;
-        name: string;
-        url: string;
-      }> = [];
+      const uploadedFiles: Array<PostFile> = [];
 
       for (const file of files) {
         const fileId = uuidv4();
@@ -579,76 +458,32 @@ app.put(
   upload.array("files"),
   async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
-      const { title, content } = req.body;
-      const files = (req.files as Express.Multer.File[]) || [];
-      const contentFiles: MediaFile[] = req.body.contentFiles
-        ? JSON.parse(req.body.contentFiles)
-        : [];
-
+      const { id, title, content, files, contentFiles, filesToDelete } =
+        convertPostReqToPostData(req);
       // Get post file
       const postContent = await getContent(`posts/${id}.json`);
 
       // Compare existing files with new files
       const existingFiles = postContent.content.files || [];
-      let newFiles: any[] = [];
-      if (req.body.files === "[object Object]") {
-        newFiles = [];
-      } else {
-        newFiles = JSON.parse(req.body.files || "[]");
-      }
 
       // Compare existing contentFiles with new contentFiles
       const existingContentFiles = postContent.content.contentFiles || [];
-      let newContentFiles: any[] = [];
-      if (req.body.contentFiles === "[object Object]") {
-        newContentFiles = [];
-      } else {
-        newContentFiles = JSON.parse(req.body.contentFiles || "[]");
-      }
 
       // Find contentFiles to delete (exist in GitHub but not in new contentFiles)
       const contentFilesToDelete = existingContentFiles.filter(
         (existingFile: MediaFile) =>
-          !newContentFiles.some(
-            (newFile: MediaFile) => newFile.uuid === existingFile.uuid
+          !contentFiles.some(
+            (newFile: MediaFile) => newFile.id === existingFile.id
           )
       );
 
       // Delete contentFiles that are no longer needed
-      for (const file of contentFilesToDelete) {
-        const filePath = file.url.split("/main/")[1];
-        console.log("contentFile to delete:", filePath);
-        const fileResponse = await getFile(filePath);
-        await deleteFile(filePath, fileResponse.sha);
-        console.log("contentFile deleted");
-      }
-
-      // Find files to delete (exist in GitHub but not in new files)
-      const filesToDelete = existingFiles.filter(
-        (existingFile: any) =>
-          !newFiles.some((newFile: any) => newFile.id === existingFile.id)
-      );
-
-      console.log("filesToDelete");
+      await deleteFiles(contentFilesToDelete);
       // Delete files that are no longer needed
-      for (const file of filesToDelete) {
-        const filePath = file.url.split("/main/")[1];
-        console.log("filePath", filePath);
-        const fileResponse = await getFile(filePath);
-        await deleteFile(filePath, fileResponse.sha);
-        console.log("file deleted");
-      }
+      await deleteFiles(filesToDelete);
 
       // Upload new contentFiles (UUID-based media)
-      const uploadedContentFiles: Array<{
-        id: string;
-        name: string;
-        url: string;
-        uuid: string;
-        type: string;
-        status: FileStatus;
-      }> = [];
+      const uploadedContentFiles: Array<MediaFile> = [];
 
       let replacedContent = content;
       for (const file of contentFiles) {
@@ -661,7 +496,7 @@ app.put(
         }
 
         // Extract actual base64 part if data is in data:image/... format
-        let base64Content = file.base64;
+        let base64Content = file.url;
         if (base64Content && base64Content.includes(",")) {
           base64Content = base64Content.split(",")[1];
         }
@@ -675,18 +510,17 @@ app.put(
         }
 
         const contentFilePath = `content/${file.name}`;
-        await createContentFile(contentFilePath, file.uuid, base64Content);
+        await createContentFile(contentFilePath, file.id, base64Content);
         uploadedContentFiles.push({
-          id: file.uuid,
+          id: file.id,
           name: file.name,
           url: `https://raw.githubusercontent.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/main/${contentFilePath}`,
-          uuid: file.uuid, // Preserve UUID
           type: file.type, // Preserve file type
           status: file.status,
         });
         //TODO: Refactor this to use a more efficient method
         replacedContent = replacedContent.replaceAll(
-          file.uuid,
+          file.id,
           `https://raw.githubusercontent.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/main/${contentFilePath}`
         );
       }
@@ -712,17 +546,12 @@ app.put(
       console.log("file Uploaded");
 
       // Combine existing files that weren't deleted with new files
-      const finalFiles = [
-        ...existingFiles.filter((existingFile: any) =>
-          newFiles.some((newFile: any) => newFile.id === existingFile.id)
-        ),
-        ...uploadedFiles,
-      ];
+      const finalFiles = [...existingFiles, ...uploadedFiles];
 
       // Combine existing contentFiles that weren't deleted with new contentFiles
       const finalContentFiles = [
         ...existingContentFiles.filter((existingFile: any) =>
-          newContentFiles.some(
+          contentFiles.some(
             (newFile: any) => newFile.uuid === existingFile.uuid
           )
         ),
