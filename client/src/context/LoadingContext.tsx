@@ -2,31 +2,23 @@ import { createContext, useContext, useState } from "react";
 import axios from "axios";
 import Loading from "./Loading";
 type LoadingContextType = {
-  loading: boolean;
+  loading: number;
   get: (url: string) => Promise<any>;
   del: (url: string) => Promise<any>;
   post: (url: string, data: any, headers: any) => Promise<any>;
   put: (url: string, data: any, headers: any) => Promise<any>;
   loadingProcess: (invoke: () => Promise<Object>) => Promise<Object>;
 };
-//abstract functions
-let startLoading = () => {};
-let endLoading = () => {};
-//template method pattern
-const loadingProcess = async (invoke: () => Promise<Object>) => {
-  startLoading();
-  const response = await invoke();
-  endLoading();
-  return response;
-};
 
 const LoadingContext = createContext<LoadingContextType>({
-  loading: false,
+  loading: 0,
   get: async (url: string) => ({}),
   del: async (url: string) => ({}),
   post: async (url: string, data: any, headers: any) => ({}),
   put: async (url: string, data: any, headers: any) => ({}),
-  loadingProcess: loadingProcess,
+  loadingProcess: async (invoke: () => Promise<Object>) => {
+    return await invoke();
+  },
 });
 
 export const LoadingProvider = ({
@@ -34,67 +26,70 @@ export const LoadingProvider = ({
 }: {
   children: React.ReactNode;
 }) => {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(0);
   //implement abstract functions
-  startLoading = () => setLoading(true);
-  endLoading = () => setLoading(false);
-  const get = async (url: string) => {
-    setLoading(true);
+  const loadingProcess = async (invoke: () => Promise<Object>) => {
+    setLoading((prev) => prev + 1);
     try {
-      const response = await axios.get(url);
-      return response.data;
-    } catch (error) {
-      console.error("Error getting:", error);
-      throw error;
+      return await invoke();
     } finally {
-      setLoading(false);
+      setLoading((prev) => prev - 1);
     }
+  };
+
+  const get = async (url: string) => {
+    return loadingProcess(async () => {
+      try {
+        const response = await axios.get(url);
+        return response.data;
+      } catch (error) {
+        console.error("Error getting:", error);
+        throw error;
+      }
+    });
   };
 
   const del = async (url: string) => {
-    setLoading(true);
-    try {
-      const response = await axios.delete(url);
-      return response.data;
-    } catch (error) {
-      console.error("Error deleting:", error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
+    return loadingProcess(async () => {
+      try {
+        const response = await axios.delete(url);
+        return response.data;
+      } catch (error) {
+        console.error("Error deleting:", error);
+        throw error;
+      }
+    });
   };
 
   const post = async (url: string, data: any, headers: any) => {
-    setLoading(true);
-    try {
-      const response = await axios.post(url, data, headers);
-      return response.data;
-    } catch (error) {
-      console.error("Error posting:", error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
+    return loadingProcess(async () => {
+      try {
+        const response = await axios.post(url, data, headers);
+        return response.data;
+      } catch (error) {
+        console.error("Error posting:", error);
+        throw error;
+      }
+    });
   };
 
   const put = async (url: string, data: any, headers: any) => {
-    setLoading(true);
-    try {
-      const response = await axios.put(url, data, headers);
-      return response.data;
-    } catch (error) {
-      console.error("Error putting:", error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
+    return loadingProcess(async () => {
+      try {
+        const response = await axios.put(url, data, headers);
+        return response.data;
+      } catch (error) {
+        console.error("Error putting:", error);
+        throw error;
+      }
+    });
   };
 
   return (
     <LoadingContext.Provider
       value={{ loading, get, del, post, put, loadingProcess }}
     >
-      <Loading show={loading} />
+      <Loading show={loading > 0} />
       {children}
     </LoadingContext.Provider>
   );

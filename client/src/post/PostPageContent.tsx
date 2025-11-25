@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { Container, Box } from "@mui/material";
 import PostEditor from "./PostEditor";
-import PostList from "./list/PostList";
-import { FILE_STATUS } from "../type/File";
+import PostList from "./PostList";
+import { FILE_STATUS, UploadedFile } from "../type/File";
 import Header from "./Header";
 import { useLoadingContext } from "../context/LoadingContext";
 import { usePostPageContext } from "../context/PostPageContext";
+import { Post } from "../type/Post";
+import { PostFile } from "../type/File";
+import { convertUploadedFileToPostFile, processPost } from "./FileAdapter";
 
 function PostPageContent() {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -20,10 +23,10 @@ function PostPageContent() {
     fetchPosts();
     setGlobalHandlers();
     window.addEventListener("popstate", handlePopState);
-
     return () => {
       window.removeEventListener("popstate", handlePopState);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Handle editor state changes
@@ -47,16 +50,12 @@ function PostPageContent() {
   };
 
   const fetchPosts = async (): Promise<void> => {
-    try {
-      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:5000";
-      const response = await get(`${apiUrl}/api/posts`);
-      console.log("response", response);
-      const sort = (a: Post, b: Post) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      setPosts(response.data.sort(sort));
-    } catch (error) {
-      console.error("Error fetching posts:", error);
-    }
+    const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:5000";
+    const response = await get(`${apiUrl}/api/posts`);
+    console.log("response", response);
+    const sort = (a: Post, b: Post) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    setPosts(response.data.sort(sort).map(processPost));
   };
 
   const HeaderButtonClick = () => {
@@ -77,7 +76,7 @@ function PostPageContent() {
 
   const handlePostClick = (post: Post): void => {
     console.log("handlePostClick", post);
-    post.contentFiles = post.contentFiles?.map((contentFile) => {
+    post.contentFiles = post.contentFiles?.map((contentFile: PostFile) => {
       return {
         ...contentFile,
         status: FILE_STATUS.UPLOADED,

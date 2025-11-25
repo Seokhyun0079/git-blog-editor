@@ -1,0 +1,57 @@
+.youtubePreview {
+  margin-top: 16px;
+  padding: 16px;
+  background-color: #fafafa;
+  border-radius: 4px;
+  position: relative;
+}
+
+.youtubePreviewContainer {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  width: 560px;
+  height: 315px;
+}
+
+.youtubePreviewSlider {
+  display: flex;
+  transition: transform 0.5s ease-in-out;
+}
+
+.youtubePreviewIframe {
+  flex-shrink: 0;
+}
+
+.youtubePreviewNavButton {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  z-index: 2;
+
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.7);
+  }
+}
+
+.youtubePreviewNavButtonPrev {
+  left: 8px;
+}
+
+.youtubePreviewNavButtonNext {
+  right: 8px;
+}
+
+.youtubePreviewInfo {
+  margin-top: 16px;
+}
+
+.youtubePreviewUrl {
+  margin-top: 8px;
+}
+
+.youtubePreviewRemoveButton {
+  margin-top: 8px;
+}
