@@ -1,6 +1,17 @@
-import { useEffect, useState, ChangeEvent, FormEvent, DragEvent } from "react";
+import {
+  useEffect,
+  useState,
+  ChangeEvent,
+  FormEvent,
+  useCallback,
+} from "react";
 import { Box, TextField, Button, Typography, Paper } from "@mui/material";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import { CustomImage } from "./edit/CustomImage";
+import { Video, YouTube } from "./edit/TiptapExtensions";
+import Placeholder from "@tiptap/extension-placeholder";
 import { FILE_STATUS, PostFile } from "../type/File";
 import { usePostPageContext } from "../context/PostPageContext";
 import { useLoadingContext } from "../context/LoadingContext";
@@ -28,7 +39,6 @@ const fileProcess = (
 
 const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
   const [title, setTitle] = useState<string>("");
-  const [content, setContent] = useState<string>("");
   const [files, setFiles] = useState<File[]>([]);
   const [contentFiles, setContentFiles] = useState<PostFile[]>([]); // Cache base64 for preview
   const [attachedFiles, setAttachedFiles] = useState<PostFile[]>([]);
@@ -36,13 +46,32 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
 
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
-  const [dragOver, setDragOver] = useState<boolean>(false);
 
   const [youtubeVideoUrls, setYoutubeVideoUrls] = useState<string[]>([]);
   const [youtubeDialogOpen, setYoutubeDialogOpen] = useState<boolean>(false);
   const { onPostCreated } = usePostPageContext();
   const { post, put } = useLoadingContext();
   const { showToast } = useToastContext();
+
+  // Tiptap Editor
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      CustomImage.configure({
+        inline: false,
+        allowBase64: true,
+      }),
+      Video,
+      YouTube,
+      Placeholder.configure({
+        placeholder: "Enter your content here...",
+      }),
+    ],
+    content: "",
+    onUpdate: ({ editor }) => {
+      // Content is managed by Tiptap, we'll extract it on submit
+    },
+  });
 
   // Open YouTube dialog
   const handleOpenYouTubeDialog = (): void => {
@@ -54,23 +83,49 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
     setYoutubeDialogOpen(false);
   };
 
+  // Helper function to get focused chain
+  const getFocusedChain = () => {
+    if (!editor) return null;
+    return editor.chain().focus();
+  };
+
   // Confirm YouTube URL
   const handleConfirmYouTubeUrl = (videoId: string): void => {
+    if (!editor) return;
     const youtubeVideoUrl = `https://www.youtube.com/embed/${videoId}`;
     setYoutubeVideoUrls((prev) => [...prev, youtubeVideoUrl]);
     setYoutubeDialogOpen(false);
-    setContent((prev) => prev + `\n<youtube src="${youtubeVideoUrl}">\n`);
+    getFocusedChain()
+      ?.insertContent({
+        type: "youtube",
+        attrs: { src: youtubeVideoUrl },
+      })
+      .run();
   };
   const setAttachedMedia = (file: File, postFile: PostFile) => {
     setAttachedFiles((prev) => [...prev, postFile]);
     setFiles((prev) => [...prev, file]);
   };
 
+  const insertMediaContent = (type: "image" | "video", postFile: PostFile) => {
+    getFocusedChain()
+      ?.insertContent({
+        type,
+        attrs: {
+          src: postFile.url,
+          uuid: postFile.id,
+        },
+      })
+      .run();
+  };
+
   const setContentMedia = (file: File, postFile: PostFile) => {
-    const tagType = postFile.type === "image" ? "img" : "video";
-    const tag = `<${tagType} src="${postFile.id}"/>`;
+    if (!editor) return;
     setContentFiles((prev) => [...prev, postFile]);
-    setContent((prev) => prev + "\n" + tag + "\n");
+
+    if (postFile.type === "image" || postFile.type === "video") {
+      insertMediaContent(postFile.type, postFile);
+    }
   };
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>): void => {
@@ -95,52 +150,84 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
   };
 
   const handleRemoveContentFile = (index: number): void => {
+    if (!editor) return;
     const fileToRemove = contentFiles[index];
 
-    // Update the file marked for deletion in the original array
-    setContentFiles((prev) =>
-      prev.map((file, i) => (i === index ? fileToRemove : file))
-    );
-    if (fileToRemove.id) {
-      // Remove UUID tag from content
-      const srcValue =
-        fileToRemove.status === FILE_STATUS.UPLOADED
-          ? fileToRemove.url
-          : fileToRemove.id;
-      const tagType = fileToRemove.type === "image" ? "img" : "video";
-      // Escape special regex characters in srcValue
-      const escapedSrc = srcValue.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      // Match the entire tag from start to end
-      const tagRegex = new RegExp(
-        `<${tagType}\\s+src="${escapedSrc}"\\s*/>`,
-        "g"
-      );
-      setContent((prev) => prev.replace(tagRegex, ""));
-    }
+    // Find and remove the node from editor
+    const srcValue =
+      fileToRemove.status === FILE_STATUS.UPLOADED
+        ? fileToRemove.url
+        : fileToRemove.id;
+
+    // Find nodes with matching UUID or src
+    editor.state.doc.descendants((node, pos) => {
+      if (fileToRemove.type === "image" && node.type.name === "image") {
+        const nodeUuid = node.attrs.uuid || node.attrs.src;
+        if (nodeUuid === srcValue || nodeUuid === fileToRemove.id) {
+          getFocusedChain()
+            ?.deleteRange({ from: pos, to: pos + node.nodeSize })
+            .run();
+        }
+      } else if (fileToRemove.type === "video" && node.type.name === "video") {
+        const nodeUuid = node.attrs.uuid || node.attrs.src;
+        if (nodeUuid === srcValue || nodeUuid === fileToRemove.id) {
+          getFocusedChain()
+            ?.deleteRange({ from: pos, to: pos + node.nodeSize })
+            .run();
+        }
+      }
+    });
+
     // Remove from preview list
     setContentFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleDragOver = (e: DragEvent<HTMLDivElement>): void => {
-    e.preventDefault();
-    setDragOver(true);
-  };
+  // Handle file drop on editor
+  const handleDrop = useCallback(
+    (event: React.DragEvent) => {
+      if (!editor) return;
+      event.preventDefault();
+      const files = Array.from(event.dataTransfer.files);
+      files.forEach((file) => fileProcess(file, setContentMedia));
+    },
+    [editor]
+  );
 
-  const handleDragLeave = (e: DragEvent<HTMLDivElement>): void => {
-    e.preventDefault();
-    setDragOver(false);
-  };
+  // Convert Tiptap HTML to legacy format for server compatibility
+  const convertTiptapToLegacyFormat = (html: string): string => {
+    let converted = html;
 
-  const handleDrop = (e: DragEvent<HTMLDivElement>): void => {
-    e.preventDefault();
-    setDragOver(false);
-    const files = Array.from(e.dataTransfer.files);
-    files.forEach((file) => fileProcess(file, setContentMedia));
+    // Convert Tiptap image nodes to legacy format
+    converted = converted.replace(
+      /<img[^>]+data-uuid="([^"]+)"[^>]*src="([^"]+)"[^>]*>/gi,
+      (match, uuid, src) => {
+        return `<img src="${uuid}"/>`;
+      }
+    );
+
+    // Convert Tiptap video nodes to legacy format
+    converted = converted.replace(
+      /<video[^>]+data-uuid="([^"]+)"[^>]*src="([^"]+)"[^>]*>/gi,
+      (match, uuid, src) => {
+        return `<video src="${uuid}"/>`;
+      }
+    );
+
+    // Convert YouTube nodes to legacy format
+    converted = converted.replace(
+      /<youtube[^>]+src="([^"]+)"[^>]*>/gi,
+      (match, src) => {
+        return `<youtube src="${src}">`;
+      }
+    );
+
+    return converted;
   };
 
   const handleSubmit = async (
     event: FormEvent<HTMLFormElement>
   ): Promise<void> => {
+    if (!editor) return;
     console.log("handleSubmit");
     event.preventDefault();
     setLoading(true);
@@ -149,7 +236,12 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
     try {
       const formData = new FormData();
       formData.append("title", title);
-      formData.append("content", content);
+
+      // Get HTML from Tiptap and convert to legacy format
+      const tiptapHtml = editor.getHTML();
+      const legacyContent = convertTiptapToLegacyFormat(tiptapHtml);
+      formData.append("content", legacyContent);
+
       // Send only files with UUID as contentFiles
       formData.append("contentFiles", JSON.stringify(contentFiles));
       files.forEach((file) => {
@@ -173,7 +265,7 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
 
       if (response.success) {
         setTitle("");
-        setContent("");
+        editor.commands.clearContent();
         setFiles([]);
         setContentFiles([]);
         setYoutubeVideoUrls([]);
@@ -196,17 +288,73 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
     }
   };
 
+  // Convert legacy format to Tiptap HTML
+  const convertLegacyToTiptapFormat = (
+    content: string,
+    contentFiles: PostFile[]
+  ): string => {
+    let converted = content;
+
+    // Create UUID to file mapping
+    const uuidToFileMap: Record<string, PostFile> = {};
+    contentFiles.forEach((file) => {
+      uuidToFileMap[file.id] = file;
+    });
+
+    // Convert legacy img tags to Tiptap format
+    converted = converted.replace(
+      /<img\s+src="([^"]+)"\s*\/?>/gi,
+      (match, uuid) => {
+        const file = uuidToFileMap[uuid];
+        if (file) {
+          return `<img src="${file.url}" data-uuid="${file.id}" />`;
+        }
+        return match;
+      }
+    );
+
+    // Convert legacy video tags to Tiptap format
+    converted = converted.replace(
+      /<video\s+src="([^"]+)"\s*\/?>/gi,
+      (match, uuid) => {
+        const file = uuidToFileMap[uuid];
+        if (file) {
+          return `<video src="${file.url}" data-uuid="${file.id}" controls style="max-width: 100%; height: auto;"></video>`;
+        }
+        return match;
+      }
+    );
+
+    // Convert legacy youtube tags to Tiptap format
+    converted = converted.replace(
+      /<youtube\s+src="([^"]+)"[^>]*>/gi,
+      (match, src) => {
+        return `<youtube src="${src}"></youtube>`;
+      }
+    );
+
+    return converted;
+  };
+
   const initializePost = () => {
-    if (selectedPost) {
+    if (selectedPost && editor) {
       setTitle(selectedPost.title);
-      setContent(selectedPost.content);
       setAttachedFiles(selectedPost.files || []);
-      // selectedPost.files may already include base64 preview URLs
-      setContentFiles((selectedPost.contentFiles || []) as PostFile[]);
+      const postContentFiles = (selectedPost.contentFiles || []) as PostFile[];
+      setContentFiles(postContentFiles);
       setYoutubeVideoUrls(selectedPost.youtubeVideoUrls || []);
+
+      // Convert legacy content to Tiptap format
+      const tiptapContent = convertLegacyToTiptapFormat(
+        selectedPost.content,
+        postContentFiles
+      );
+      editor.commands.setContent(tiptapContent);
     } else {
       setTitle("");
-      setContent("");
+      if (editor) {
+        editor.commands.clearContent();
+      }
       setFiles([]);
       setContentFiles([]);
       setAttachedFiles([]);
@@ -215,9 +363,11 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
   };
 
   useEffect(() => {
-    initializePost();
+    if (editor) {
+      initializePost();
+    }
     // eslint-disable-next-line
-  }, [selectedPost]);
+  }, [selectedPost, editor]);
 
   // Files without UUID (regular attachments)
   // const attachedFiles = files.filter((file) => !file.uuid);
@@ -241,35 +391,46 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
           handleContentFileInsert={handleContentFileInsert}
           handleOpenYouTubeDialog={handleOpenYouTubeDialog}
         />
-        <TextField
-          fullWidth
-          label="Content"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          margin="normal"
-          required
-          multiline
-          rows={6}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
+        <Box
           sx={{
-            border: dragOver ? "2px dashed #1976d2" : "none",
-            backgroundColor: dragOver
-              ? "rgba(25, 118, 210, 0.04)"
-              : "transparent",
+            mt: 2,
+            mb: 2,
+            border: "1px solid #e0e0e0",
+            borderRadius: 1,
+            minHeight: 300,
+            overflow: "hidden",
+            "& .ProseMirror": {
+              outline: "none",
+              padding: 2,
+              minHeight: 300,
+              maxWidth: "100%",
+              wordWrap: "break-word",
+              "& img": {
+                maxWidth: "100%",
+                height: "auto",
+                display: "block",
+                margin: "1rem 0",
+              },
+              "& video": {
+                maxWidth: "100%",
+                height: "auto",
+                display: "block",
+                margin: "1rem 0",
+              },
+              "& p.is-editor-empty:first-child::before": {
+                color: "#adb5bd",
+                content: "attr(data-placeholder)",
+                float: "left",
+                height: 0,
+                pointerEvents: "none",
+              },
+            },
           }}
-        />
-
-        {dragOver && (
-          <Typography
-            variant="caption"
-            color="primary"
-            sx={{ mt: 1, display: "block" }}
-          >
-            Drop files here to insert
-          </Typography>
-        )}
+          onDrop={handleDrop}
+          onDragOver={(e) => e.preventDefault()}
+        >
+          {editor && <EditorContent editor={editor} />}
+        </Box>
 
         {/* Display YouTube video information */}
         <YoutubePreview
@@ -317,7 +478,7 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
             type="submit"
             variant="contained"
             color="primary"
-            disabled={loading || !title || !content}
+            disabled={loading || !title || editor?.isEmpty}
           >
             {loading ? "Saving..." : "Save"}
           </Button>
