@@ -1,6 +1,7 @@
-import { PostData, PostReq } from "./Post";
+import { MediaFile } from "./File";
+import { PostCreateReq, PostUpdateReq } from "./Post";
 import { Request } from "express";
-export const convertPostReqToPostData = (req: Request): PostReq => {
+export const convertToPostUpdateReq = (req: Request): PostUpdateReq => {
   console.log("=== PUT Request Debug ===");
   console.log("Content-Type:", req.headers["content-type"]);
   console.log("req.files:", req.files);
@@ -22,6 +23,17 @@ export const convertPostReqToPostData = (req: Request): PostReq => {
       : [],
     filesToDelete: req.body.filesToDelete
       ? JSON.parse(req.body.filesToDelete)
+      : [],
+  };
+};
+
+export const convertToPostCreateReq = (req: Request): PostCreateReq => {
+  return {
+    title: req.body.title,
+    content: req.body.content,
+    files: (req.files as Express.Multer.File[]) || [],
+    contentFiles: req.body.contentFiles
+      ? (JSON.parse(req.body.contentFiles) as MediaFile[])
       : [],
   };
 };
