@@ -10,6 +10,7 @@ import MediaInsertBtns from "./edit/MediaInsertBtns";
 import YoutubePreview from "./edit/YotubePreview";
 import { PostEditorProps } from "./Props";
 import { convertFileToPostFile } from "./FileAdapter";
+import { TOAST_TYPES, useToastContext } from "../context/ToastContext";
 
 const requestHeaders = {};
 
@@ -41,6 +42,7 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
   const [youtubeDialogOpen, setYoutubeDialogOpen] = useState<boolean>(false);
   const { onPostCreated } = usePostPageContext();
   const { post, put } = useLoadingContext();
+  const { showToast } = useToastContext();
 
   // Open YouTube dialog
   const handleOpenYouTubeDialog = (): void => {
@@ -176,6 +178,7 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
         setContentFiles([]);
         setYoutubeVideoUrls([]);
         onPostCreated();
+        showToast("Post registered successfully", TOAST_TYPES.SUCCESS);
       } else {
         throw new Error(
           response.error || "An error occurred while creating the post."

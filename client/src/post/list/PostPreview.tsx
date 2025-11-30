@@ -13,6 +13,7 @@ import axios from "axios";
 import { useState } from "react";
 import { usePostPageContext } from "../../context/PostPageContext";
 import { Post } from "../../type/Post";
+import { useToastContext, TOAST_TYPES } from "../../context/ToastContext";
 
 interface PostPreivewProps {
   post: Post;
@@ -44,12 +45,14 @@ const computePrimary = (
 
 const PostPreivew = ({ post }: PostPreivewProps) => {
   const { onPostClicked, onPostDeleted } = usePostPageContext();
+  const { showToast } = useToastContext();
   const [open, setOpen] = useState<boolean>(false);
 
   const handleDeletePost = async (id: string): Promise<void> => {
     try {
       const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:5000";
       await axios.delete(`${apiUrl}/api/posts/${id}`);
+      showToast("Post deleted successfully", TOAST_TYPES.SUCCESS);
       onPostDeleted();
     } catch (error) {
       console.error("Error deleting post:", error);
