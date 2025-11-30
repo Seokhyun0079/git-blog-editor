@@ -2,13 +2,13 @@ import { useState, useEffect, useRef } from "react";
 import { Container, Box } from "@mui/material";
 import PostEditor from "./PostEditor";
 import PostList from "./PostList";
-import { FILE_STATUS, UploadedFile } from "../type/File";
+import { FILE_STATUS } from "../type/File";
 import Header from "./Header";
 import { useLoadingContext } from "../context/LoadingContext";
 import { usePostPageContext } from "../context/PostPageContext";
 import { Post } from "../type/Post";
 import { PostFile } from "../type/File";
-import { convertUploadedFileToPostFile, processPost } from "./FileAdapter";
+import { processPost } from "./FileAdapter";
 
 function PostPageContent() {
   const [posts, setPosts] = useState<Post[]>([]);

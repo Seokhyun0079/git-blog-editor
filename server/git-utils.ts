@@ -91,6 +91,19 @@ export const createContentFile = async (
     throw new Error(`No base64 content provided for file: ${fileId}`);
   }
 
+  // Check if file already exists to get its sha for update
+  let existingSha: string | null = null;
+  try {
+    const existingFile = await getFile(contentFilePath);
+    existingSha = existingFile.sha;
+  } catch (error: any) {
+    // File doesn't exist (404), which is fine for new file creation
+    // Re-throw if it's a different error
+    if (error.status !== 404) {
+      throw error;
+    }
+  }
+
   await octokit.rest.repos.createOrUpdateFileContents({
     owner: process.env.GITHUB_OWNER!,
     repo: process.env.GITHUB_REPO!,
@@ -98,6 +111,7 @@ export const createContentFile = async (
     message: `Upload content file: ${fileId}`,
     content: base64,
     branch: "main",
+    ...(existingSha && { sha: existingSha }),
   });
 };
 
