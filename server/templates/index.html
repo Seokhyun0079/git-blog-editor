@@ -53,11 +53,20 @@
       .post {
         background: var(--card-background);
         border-radius: 12px;
-        overflow: hidden;
+        overflow-y: auto;
+        overflow-x: hidden;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         transition: transform 0.3s ease, box-shadow 0.3s ease;
         text-decoration: none;
         color: inherit;
+        max-height: 380px;
+        /* Hide scrollbar but keep scrolling functionality */
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE and Edge */
+      }
+
+      .post::-webkit-scrollbar {
+        display: none; /* Chrome, Safari, Opera */
       }
 
       .post:hover {

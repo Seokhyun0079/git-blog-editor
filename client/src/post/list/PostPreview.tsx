@@ -64,12 +64,13 @@ const PostPreivew = ({ post }: PostPreivewProps) => {
   };
 
   return (
-    <Paper sx={{ mb: 2 }}>
-      <ListItem alignItems="flex-start">
+    <Paper sx={{ mb: 2, overflow: "hidden" }}>
+      <ListItem alignItems="flex-start" sx={{ overflow: "hidden" }}>
         <ListItemText
           onClick={handleOpen}
           primary={computePrimary(open, post, setOpen)}
           secondary={open && <PostContent post={post} />}
+          sx={{ overflow: "hidden", wordBreak: "break-word" }}
         />
         <IconButton
           edge="end"

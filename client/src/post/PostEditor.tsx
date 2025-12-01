@@ -417,7 +417,7 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
                 display: "block",
                 margin: "1rem 0",
               },
-              "& p.is-editor-empty:first-child::before": {
+              "& p.is-editor-empty:first-of-type::before": {
                 color: "#adb5bd",
                 content: "attr(data-placeholder)",
                 float: "left",

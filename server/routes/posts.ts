@@ -41,7 +41,6 @@ const upload = multer({
 
 // Delete post endpoint
 router.delete("/:id", async (req: Request, res: Response) => {
-  console.log("delete post");
   try {
     const { id } = req.params;
 
@@ -70,10 +69,8 @@ router.delete("/:id", async (req: Request, res: Response) => {
 
     res.json({ success: true, message: "Post deleted successfully" });
   } catch (error: any) {
-    console.error("Error deleting post:", error);
     res.status(500).json({ success: false, error: error.message });
   }
-  console.log("post deleted");
 });
 
 // Create blog post endpoint
@@ -100,7 +97,6 @@ router.post("/", upload.array("files"), async (req: Request, res: Response) => {
       }
 
       if (!base64Content) {
-        console.log("Skipping file without base64 content:", file);
         continue;
       }
 
@@ -155,14 +151,12 @@ router.post("/", upload.array("files"), async (req: Request, res: Response) => {
     await updateMetaJson(filename);
     res.json({ success: true, filename, postId });
   } catch (error: any) {
-    console.error("Error creating post:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // Get blog posts endpoint
 router.get("/", async (req: Request, res: Response) => {
-  console.log("get");
   try {
     const response = await octokit.rest.repos.getContent({
       owner: process.env.GITHUB_OWNER!,
@@ -188,14 +182,66 @@ router.get("/", async (req: Request, res: Response) => {
               path: file.path,
             });
 
-            if ("content" in content.data) {
-              return JSON.parse(
-                Buffer.from(content.data.content, "base64").toString()
-              );
+            // GitHub API returns content field, but it may be empty for files > 1MB
+            // In that case, we need to use download_url instead
+            const fileSize = (content.data as any).size;
+            const hasContent = "content" in content.data;
+            const base64Content = hasContent
+              ? (content.data as any).content
+              : null;
+            const downloadUrl = (content.data as any).download_url;
+
+            // If content is empty or missing, try download_url (for large files > 1MB)
+            if (
+              !hasContent ||
+              !base64Content ||
+              base64Content.trim().length === 0
+            ) {
+              if (downloadUrl) {
+                try {
+                  const downloadResponse = await fetch(downloadUrl);
+                  if (!downloadResponse.ok) {
+                    return null;
+                  }
+                  const textContent = await downloadResponse.text();
+                  if (!textContent || textContent.trim().length === 0) {
+                    return null;
+                  }
+                  const parsed = JSON.parse(textContent);
+                  if (parsed === null || typeof parsed !== "object") {
+                    return null;
+                  }
+                  return parsed;
+                } catch (downloadError) {
+                  return null;
+                }
+              } else {
+                return null;
+              }
             }
-            return null;
+
+            // Decode base64 content for smaller files
+            const decodedContent = Buffer.from(
+              base64Content,
+              "base64"
+            ).toString();
+
+            // Check if decoded content is empty
+            if (!decodedContent || decodedContent.trim().length === 0) {
+              return null;
+            }
+
+            try {
+              const parsed = JSON.parse(decodedContent);
+              // Validate that parsed result is an object (not null, not primitive)
+              if (parsed === null || typeof parsed !== "object") {
+                return null;
+              }
+              return parsed;
+            } catch (parseError) {
+              return null;
+            }
           } catch (error) {
-            console.error(`Error fetching post ${file.path}:`, error);
             return null;
           }
         })
@@ -206,7 +252,6 @@ router.get("/", async (req: Request, res: Response) => {
 
     res.json({ success: true, data: validPosts });
   } catch (error: any) {
-    console.error("Error fetching posts:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -246,11 +291,8 @@ router.put(
 
       let replacedContent = content;
       for (const file of contentFiles) {
-        console.log("Processing contentFile in PUT:", file.name); // Debug log
-
         // Handle case when file.name is missing
         if (!file.name) {
-          console.log("Skipping file without name in PUT:", file);
           continue;
         }
 
@@ -261,10 +303,6 @@ router.put(
         }
 
         if (!base64Content || file.status === FILE_STATUS.UPLOADED) {
-          console.log(
-            "Skipping file without base64 content in PUT:",
-            file.name
-          );
           continue;
         }
 
@@ -302,7 +340,6 @@ router.put(
           url: `https://raw.githubusercontent.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/main/${imagePath}`,
         });
       }
-      console.log("file Uploaded");
 
       // Combine existing files that weren't deleted with new files
       const finalFiles = [...existingFiles, ...uploadedFiles];
@@ -338,7 +375,6 @@ router.put(
 
       res.json({ success: true, message: "Post updated successfully" });
     } catch (error: any) {
-      console.error("Error updating post:", error);
       res.status(500).json({ success: false, error: error.message });
     }
   }
