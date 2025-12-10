@@ -49,3 +49,4 @@ export const CustomImage = Image.extend({
     ];
   },
 });
+

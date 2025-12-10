@@ -126,3 +126,4 @@ export const YouTube = Node.create({
     return ReactNodeViewRenderer(YouTubeComponent);
   },
 });
+
