@@ -478,13 +478,7 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
             type="submit"
             variant="contained"
             color="primary"
-            disabled={
-              loading ||
-              !title ||
-              (!editor?.getText().trim() &&
-                contentFiles.length === 0 &&
-                youtubeVideoUrls.length === 0)
-            }
+            disabled={loading || !title || !editor?.getText().trim()}
           >
             {loading ? "Saving..." : "Save"}
           </Button>
