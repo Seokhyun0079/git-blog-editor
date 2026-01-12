@@ -149,7 +149,12 @@ router.post("/", upload.array("files"), async (req: Request, res: Response) => {
 
     // Update meta.json
     await updateMetaJson(filename);
-    res.json({ success: true, filename, postId });
+    res.json({
+      success: true,
+      filename,
+      postId,
+      uploadedContentFiles, // Return uploaded files info for client to update editor
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -373,7 +378,11 @@ router.put(
         postResponse.sha
       );
 
-      res.json({ success: true, message: "Post updated successfully" });
+      res.json({
+        success: true,
+        message: "Post updated successfully",
+        uploadedContentFiles, // Return newly uploaded files info for client to update editor
+      });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
     }

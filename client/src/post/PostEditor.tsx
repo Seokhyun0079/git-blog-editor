@@ -46,6 +46,7 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
 
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
+  const [editorContent, setEditorContent] = useState<string>("");
 
   const [youtubeVideoUrls, setYoutubeVideoUrls] = useState<string[]>([]);
   const [youtubeDialogOpen, setYoutubeDialogOpen] = useState<boolean>(false);
@@ -69,7 +70,8 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
     ],
     content: "",
     onUpdate: ({ editor }) => {
-      // Content is managed by Tiptap, we'll extract it on submit
+      // Update editor content state to trigger re-render
+      setEditorContent(editor.getText());
     },
   });
 
@@ -239,11 +241,214 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
 
       // Get HTML from Tiptap and convert to legacy format
       const tiptapHtml = editor.getHTML();
-      const legacyContent = convertTiptapToLegacyFormat(tiptapHtml);
+
+      // Extract blob URLs from editor and convert to base64
+      const blobUrls = new Set<string>();
+      const imgRegex = /<img[^>]+(?:src|data-uuid)="(blob:[^"]+)"[^>]*>/gi;
+      const videoRegex = /<video[^>]+(?:src|data-uuid)="(blob:[^"]+)"[^>]*>/gi;
+
+      let match;
+      while ((match = imgRegex.exec(tiptapHtml)) !== null) {
+        blobUrls.add(match[1]);
+      }
+      while ((match = videoRegex.exec(tiptapHtml)) !== null) {
+        blobUrls.add(match[1]);
+      }
+
+      // Convert blob URLs to base64 and add to contentFiles if not already present
+      const finalContentFiles = [...contentFiles];
+      const blobUrlToUuidMap: Record<string, string> = {};
+
+      for (const blobUrl of Array.from(blobUrls)) {
+        // Check if this blob URL is already in contentFiles
+        const existingFile = finalContentFiles.find(
+          (file) => file.id === blobUrl || file.url === blobUrl
+        );
+
+        if (!existingFile) {
+          try {
+            // Fetch blob URL and convert to base64
+            const response = await fetch(blobUrl);
+            const blob = await response.blob();
+            const reader = new FileReader();
+            const dataUrl = await new Promise<string>((resolve, reject) => {
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+
+            // Create PostFile from blob
+            const fileExtension = blob.type.includes("video")
+              ? ".mp4"
+              : blob.type.includes("image/png")
+              ? ".png"
+              : blob.type.includes("image/jpeg")
+              ? ".jpg"
+              : ".jpg";
+            const fileId = crypto.randomUUID();
+            const fileName = `${fileId}${fileExtension}`;
+            const postFile: PostFile = {
+              id: fileId,
+              name: fileName,
+              type: blob.type.startsWith("video/") ? "video" : "image",
+              status: FILE_STATUS.DRAFT,
+              url: dataUrl,
+            };
+            finalContentFiles.push(postFile);
+            blobUrlToUuidMap[blobUrl] = fileId;
+          } catch (error) {
+            console.error("Error converting blob URL to base64:", error);
+          }
+        } else {
+          // Use existing file's ID
+          blobUrlToUuidMap[blobUrl] = existingFile.id;
+        }
+      }
+
+      // Replace blob URLs with UUIDs in HTML before converting to legacy format
+      let htmlWithUuids = tiptapHtml;
+      for (const [blobUrl, uuid] of Object.entries(blobUrlToUuidMap)) {
+        const escapedBlobUrl = blobUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        // Replace blob URL in img tags: update both src and data-uuid
+        htmlWithUuids = htmlWithUuids.replace(
+          new RegExp(`<img([^>]*?)src="${escapedBlobUrl}"([^>]*?)>`, "gi"),
+          (match, before, after) => {
+            // Check if data-uuid already exists
+            if (match.includes("data-uuid=")) {
+              // Extract existing data-uuid value
+              const uuidMatch = match.match(/data-uuid="([^"]+)"/);
+              const existingUuid = uuidMatch ? uuidMatch[1] : null;
+              // If data-uuid is also a blob URL, replace it with UUID, otherwise keep it
+              // Replace both src and data-uuid (if data-uuid was blob URL)
+              let result = match.replace(
+                new RegExp(`src="${escapedBlobUrl}"`, "g"),
+                `src="${uuid}"`
+              );
+              if (existingUuid && existingUuid.startsWith("blob:")) {
+                result = result.replace(
+                  new RegExp(`data-uuid="${escapedBlobUrl}"`, "g"),
+                  `data-uuid="${uuid}"`
+                );
+              }
+              return result;
+            } else {
+              return `<img${before}src="${uuid}" data-uuid="${uuid}"${after}>`;
+            }
+          }
+        );
+        // Replace blob URL in video tags: update both src and data-uuid
+        htmlWithUuids = htmlWithUuids.replace(
+          new RegExp(`<video([^>]*?)src="${escapedBlobUrl}"([^>]*?)>`, "gi"),
+          (match, before, after) => {
+            // Check if data-uuid already exists
+            if (match.includes("data-uuid=")) {
+              // Extract existing data-uuid value
+              const uuidMatch = match.match(/data-uuid="([^"]+)"/);
+              const existingUuid = uuidMatch ? uuidMatch[1] : null;
+              // If data-uuid is also a blob URL, replace it with UUID, otherwise keep it
+              // Replace both src and data-uuid (if data-uuid was blob URL)
+              let result = match.replace(
+                new RegExp(`src="${escapedBlobUrl}"`, "g"),
+                `src="${uuid}"`
+              );
+              if (existingUuid && existingUuid.startsWith("blob:")) {
+                result = result.replace(
+                  new RegExp(`data-uuid="${escapedBlobUrl}"`, "g"),
+                  `data-uuid="${uuid}"`
+                );
+              }
+              return result;
+            } else {
+              return `<video${before}src="${uuid}" data-uuid="${uuid}"${after}>`;
+            }
+          }
+        );
+      }
+
+      // For already uploaded files (data-uuid has GitHub URL but src has blob URL),
+      // replace src with data-uuid value
+      htmlWithUuids = htmlWithUuids.replace(
+        /<img([^>]*?)data-uuid="([^"]+)"([^>]*?)src="(blob:[^"]+)"([^>]*?)>/gi,
+        (match, before, uuid, middle, blobUrl, after) => {
+          // Only replace if data-uuid is not a blob URL (i.e., it's already a GitHub URL or UUID)
+          if (!uuid.startsWith("blob:")) {
+            return `<img${before}data-uuid="${uuid}"${middle}src="${uuid}"${after}>`;
+          }
+          return match;
+        }
+      );
+      htmlWithUuids = htmlWithUuids.replace(
+        /<video([^>]*?)data-uuid="([^"]+)"([^>]*?)src="(blob:[^"]+)"([^>]*?)>/gi,
+        (match, before, uuid, middle, blobUrl, after) => {
+          // Only replace if data-uuid is not a blob URL (i.e., it's already a GitHub URL or UUID)
+          if (!uuid.startsWith("blob:")) {
+            return `<video${before}data-uuid="${uuid}"${middle}src="${uuid}"${after}>`;
+          }
+          return match;
+        }
+      );
+
+      // Handle base64 data URLs: find base64 in src and match with contentFiles
+      // Create base64 to UUID mapping from contentFiles
+      const base64ToUuidMap: Record<string, string> = {};
+      finalContentFiles.forEach((file) => {
+        if (file.url && file.url.startsWith("data:")) {
+          // Use full data URL as key for matching
+          base64ToUuidMap[file.url] = file.id;
+        }
+      });
+
+      // Replace base64 data URLs with UUIDs in img tags
+      htmlWithUuids = htmlWithUuids.replace(
+        /<img([^>]*?)src="(data:[^"]+)"([^>]*?)>/gi,
+        (match, before, base64Url, after) => {
+          const uuid = base64ToUuidMap[base64Url];
+          if (uuid) {
+            // Check if data-uuid already exists
+            if (match.includes("data-uuid=")) {
+              return match.replace(
+                new RegExp(
+                  `src="${base64Url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`,
+                  "g"
+                ),
+                `src="${uuid}"`
+              );
+            } else {
+              return `<img${before}src="${uuid}" data-uuid="${uuid}"${after}>`;
+            }
+          }
+          return match;
+        }
+      );
+
+      // Replace base64 data URLs with UUIDs in video tags
+      htmlWithUuids = htmlWithUuids.replace(
+        /<video([^>]*?)src="(data:[^"]+)"([^>]*?)>/gi,
+        (match, before, base64Url, after) => {
+          const uuid = base64ToUuidMap[base64Url];
+          if (uuid) {
+            // Check if data-uuid already exists
+            if (match.includes("data-uuid=")) {
+              return match.replace(
+                new RegExp(
+                  `src="${base64Url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`,
+                  "g"
+                ),
+                `src="${uuid}"`
+              );
+            } else {
+              return `<video${before}src="${uuid}" data-uuid="${uuid}"${after}>`;
+            }
+          }
+          return match;
+        }
+      );
+
+      const legacyContent = convertTiptapToLegacyFormat(htmlWithUuids);
       formData.append("content", legacyContent);
 
-      // Send only files with UUID as contentFiles
-      formData.append("contentFiles", JSON.stringify(contentFiles));
+      // Send files with UUID as contentFiles (including newly converted blob URLs)
+      formData.append("contentFiles", JSON.stringify(finalContentFiles));
       files.forEach((file) => {
         formData.append("files", file);
       });
@@ -264,6 +469,121 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
       }
 
       if (response.success) {
+        // Update editor: replace UUID src with GitHub URLs for uploaded files
+        if (
+          response.uploadedContentFiles &&
+          response.uploadedContentFiles.length > 0
+        ) {
+          const currentHtml = editor.getHTML();
+          let updatedHtml = currentHtml;
+
+          // Create UUID to GitHub URL mapping
+          const uuidToUrlMap: Record<string, string> = {};
+          response.uploadedContentFiles.forEach(
+            (file: { id: string; url: string }) => {
+              uuidToUrlMap[file.id] = file.url;
+            }
+          );
+
+          // Create reverse mapping: from blob URL or data URL to UUID
+          // Check contentFiles state to find original URLs
+          const urlToUuidMap: Record<string, string> = {};
+          contentFiles.forEach((file) => {
+            if (
+              file.url &&
+              (file.url.startsWith("blob:") || file.url.startsWith("data:"))
+            ) {
+              urlToUuidMap[file.url] = file.id;
+            }
+          });
+          // Also check uploaded files - match by ID to find original blob/data URLs
+          response.uploadedContentFiles.forEach(
+            (file: { id: string; url: string }) => {
+              const originalFile = contentFiles.find((f) => f.id === file.id);
+              if (
+                originalFile &&
+                originalFile.url &&
+                (originalFile.url.startsWith("blob:") ||
+                  originalFile.url.startsWith("data:"))
+              ) {
+                urlToUuidMap[originalFile.url] = file.id;
+              }
+            }
+          );
+
+          // Replace UUID or blob/data URL src with GitHub URL for images
+          updatedHtml = updatedHtml.replace(
+            /<img([^>]*?)(?:data-uuid="([^"]+)")?([^>]*?)src="([^"]+)"([^>]*?)>/gi,
+            (match, before, uuid, middle, src, after) => {
+              // Try to find UUID from data-uuid attribute, or from src if it's a blob/data URL
+              const finalUuid = uuid || urlToUuidMap[src];
+              const githubUrl = finalUuid ? uuidToUrlMap[finalUuid] : null;
+
+              // Only replace if src is UUID/blob/data URL and we have GitHub URL
+              if (
+                githubUrl &&
+                (src === finalUuid ||
+                  src.startsWith("data:") ||
+                  src.startsWith("blob:"))
+              ) {
+                // Keep data-uuid if it exists, otherwise don't add it
+                if (uuid) {
+                  return `<img${before}data-uuid="${finalUuid}"${middle}src="${githubUrl}"${after}>`;
+                } else {
+                  return `<img${before}${middle}src="${githubUrl}"${after}>`;
+                }
+              }
+              return match;
+            }
+          );
+
+          // Replace UUID or blob/data URL src with GitHub URL for videos
+          updatedHtml = updatedHtml.replace(
+            /<video([^>]*?)(?:data-uuid="([^"]+)")?([^>]*?)src="([^"]+)"([^>]*?)>/gi,
+            (match, before, uuid, middle, src, after) => {
+              // Try to find UUID from data-uuid attribute, or from src if it's a blob/data URL
+              const finalUuid = uuid || urlToUuidMap[src];
+              const githubUrl = finalUuid ? uuidToUrlMap[finalUuid] : null;
+
+              // Only replace if src is UUID/blob/data URL and we have GitHub URL
+              if (
+                githubUrl &&
+                (src === finalUuid ||
+                  src.startsWith("data:") ||
+                  src.startsWith("blob:"))
+              ) {
+                // Keep data-uuid if it exists, otherwise don't add it
+                if (uuid) {
+                  return `<video${before}data-uuid="${finalUuid}"${middle}src="${githubUrl}"${after}>`;
+                } else {
+                  return `<video${before}${middle}src="${githubUrl}"${after}>`;
+                }
+              }
+              return match;
+            }
+          );
+
+          // Update editor content
+          editor.commands.setContent(updatedHtml);
+
+          // Update contentFiles status to UPLOADED and update URLs
+          setContentFiles((prev) =>
+            prev.map((file) => {
+              const uploadedFile = response.uploadedContentFiles.find(
+                (uf: { id: string }) => uf.id === file.id
+              );
+              if (uploadedFile) {
+                return {
+                  ...file,
+                  url: uploadedFile.url,
+                  status: FILE_STATUS.UPLOADED,
+                };
+              }
+              return file;
+            })
+          );
+        }
+
         setTitle("");
         editor.commands.clearContent();
         setFiles([]);
@@ -350,10 +670,12 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
         postContentFiles
       );
       editor.commands.setContent(tiptapContent);
+      setEditorContent(editor.getText());
     } else {
       setTitle("");
       if (editor) {
         editor.commands.clearContent();
+        setEditorContent("");
       }
       setFiles([]);
       setContentFiles([]);
@@ -478,7 +800,7 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
             type="submit"
             variant="contained"
             color="primary"
-            disabled={loading || !title || !editor?.getText().trim()}
+            disabled={loading || !title || !editorContent.trim()}
           >
             {loading ? "Saving..." : "Save"}
           </Button>
