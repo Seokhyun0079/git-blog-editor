@@ -21,6 +21,15 @@ export async function readTemplate(filename: string): Promise<string> {
   }
 }
 
+/** Replace placeholders in templates synced to the blog repo (e.g. Utterances `repo`). */
+export function applyTemplateEnv(content: string): string {
+  const owner = process.env.GITHUB_OWNER ?? "";
+  const repo = process.env.GITHUB_REPO ?? "";
+  return content
+    .replace(/__GITHUB_OWNER__/g, owner)
+    .replace(/__GITHUB_REPO__/g, repo);
+}
+
 // Function to create or update template file with retry logic
 export async function createOrUpdateTemplate(
   filename: string,
@@ -31,7 +40,7 @@ export async function createOrUpdateTemplate(
     try {
       let currentSha: string | null = null;
       let needsUpdate = true;
-      const templateContent: string = await readTemplate(filename);
+      let templateContent: string = applyTemplateEnv(await readTemplate(filename));
 
       // Check if file exists and get current SHA
       try {

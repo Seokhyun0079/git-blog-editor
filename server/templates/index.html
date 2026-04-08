@@ -171,18 +171,22 @@
       // Function to fetch and display posts
       async function loadPosts() {
         try {
-          const metaResponse = await fetch("./posts/meta.json");
+          const metaResponse = await fetch("./posts/meta.json", {
+            cache: "no-store",
+          });
           const meta = await metaResponse.json();
           const postsContainer = document.getElementById("posts");
           const posts = meta.posts.reverse();
           for (const postFile of posts) {
             try {
-              const postResponse = await fetch(`./posts/${postFile}`);
+              const postResponse = await fetch(`./posts/${postFile}`, {
+                cache: "no-store",
+              });
               const post = await postResponse.json();
 
               const postElement = document.createElement("a");
               postElement.className = "post";
-              postElement.href = `./post.html?id=${postFile}&time=${Date.now()}`;
+              postElement.href = `./post.html?id=${postFile}`;
 
               let imageHtml = "";
               if (post.files && post.files.length > 0) {

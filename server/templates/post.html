@@ -131,9 +131,39 @@
         object-fit: cover;
         transition: transform 0.3s ease;
       }
+
+      .comments-section {
+        margin-top: 2rem;
+        background: var(--card-background);
+        border-radius: 12px;
+        padding: 2rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      .comments-heading {
+        margin: 0 0 1rem 0;
+        font-size: 1.35rem;
+        font-weight: 600;
+        color: var(--primary-color);
+      }
+
+      .utterances {
+        max-width: 100%;
+      }
     </style>
   </head>
   <body>
+    <script>
+      (function () {
+        try {
+          var u = new URL(window.location.href);
+          if (u.searchParams.has("time")) {
+            u.searchParams.delete("time");
+            history.replaceState(null, "", u.toString());
+          }
+        } catch (e) {}
+      })();
+    </script>
     <header>
       <div class="container">
         <a href="./" class="back-link">Back to Posts</a>
@@ -141,6 +171,22 @@
     </header>
     <div class="container">
       <article id="post-content" class="post"></article>
+      <section class="comments-section" aria-label="Comments">
+        <h2 class="comments-heading">Comments</h2>
+        <!--
+          Utterances: comments are stored as GitHub Issues (no blog server).
+          Enable Issues on this repo and install: https://github.com/apps/utterances
+          Placeholders are filled when the editor syncs templates (GITHUB_OWNER / GITHUB_REPO).
+        -->
+        <script
+          src="https://utteranc.es/client.js"
+          repo="__GITHUB_OWNER__/__GITHUB_REPO__"
+          issue-term="url"
+          theme="github-light"
+          crossorigin="anonymous"
+          async
+        ></script>
+      </section>
     </div>
     <script src="./utills.js"></script>
     <script>
@@ -153,7 +199,9 @@
             throw new Error("Post ID not found");
           }
 
-          const response = await fetch(`./posts/${postId}?time=${Date.now()}`);
+          const response = await fetch(`./posts/${postId}`, {
+            cache: "no-store",
+          });
           const post = await response.json();
 
           document.title = post.title;

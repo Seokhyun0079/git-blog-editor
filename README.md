@@ -13,6 +13,15 @@ GitHub를 블로그로 활용하는 에디터 프로젝트입니다.
 - 제목과 내용 작성
 - 파일 첨부 기능
 - JSON 형식으로 포스트 저장
+- 블로그 글 페이지 댓글(Utterances; GitHub Issues 기반)
+
+### 블로그 댓글을 쓰려면
+
+블로그에 올라가는 `post.html` 템플릿은 **Utterances**로 댓글을 붙입니다. 댓글이 **GitHub Issues**에 달리므로, 블로그로 사용하는 저장소에서 **Issues 기능을 켜야 합니다.**
+
+1. 해당 저장소 **Settings → General → Features**에서 **Issues**를 활성화합니다.
+2. [Utterances GitHub App](https://github.com/apps/utterances)을 리포지토리에 설치해주세요.
+3. 에디터 서버를 실행해 템플릿이 블로그 저장소에 동기화되면 `repo` 등이 `.env`의 `GITHUB_OWNER` / `GITHUB_REPO`에 맞게 채워집니다.
 
 ## 설치 방법
 
@@ -92,6 +101,15 @@ GitHub をブログとして活用するエディタープロジェクトです�
 - タイトルと本文の作成
 - ファイル添付機能
 - JSON 形式での投稿保存
+- ブログ記事ページのコメント（Utterances、GitHub Issues ベース）
+
+### ブログでコメントを使うには
+
+ブログ用の `post.html` テンプレートは **Utterances** でコメントを表示します。コメントは **GitHub Issues** に紐づくため、ブログとして使うリポジトリで **Issues 機能を有効**にする必要があります。
+
+1. リポジトリの **Settings → General → Features** で **Issues** を有効にします。
+2. [Utterances GitHub App](https://github.com/apps/utterances) をそのリポジトリにインストールします。
+3. エディタのサーバーを起動してテンプレートをブログ用リポジトリに同期すると、`repo` などが `.env` の `GITHUB_OWNER` / `GITHUB_REPO` に合わせて埋め込まれます。
 
 ## インストール方法
 
