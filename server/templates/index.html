@@ -111,7 +111,13 @@
       .post-date {
         color: var(--secondary-color);
         font-size: 0.9rem;
-        margin-bottom: 1rem;
+        margin-bottom: 0.35rem;
+      }
+
+      .post-comments {
+        color: var(--secondary-color);
+        font-size: 0.85rem;
+        margin-bottom: 0.75rem;
       }
 
       .post-excerpt {
@@ -168,6 +174,58 @@
     </div>
     <script src="./utills.js"></script>
     <script>
+      const BLOG_GITHUB_OWNER = "__GITHUB_OWNER__";
+      const BLOG_GITHUB_REPO = "__GITHUB_REPO__";
+
+      function isBlogGithubConfigured() {
+        return (
+          BLOG_GITHUB_OWNER &&
+          BLOG_GITHUB_REPO &&
+          !BLOG_GITHUB_OWNER.includes("__GITHUB") &&
+          !BLOG_GITHUB_REPO.includes("__GITHUB")
+        );
+      }
+
+      /** Same canonical URL Utterances uses with issue-term="url" (post detail page). */
+      function postPageUrlForUtterances(postFile) {
+        const a = document.createElement("a");
+        a.href = "./post.html?id=" + postFile;
+        return a.href;
+      }
+
+      /**
+       * Map issue title -> comment count. Utterances (issue-term=url) stores the page URL as the issue title.
+       * Lists issues (no label filter — labels are not always applied). Skips pull requests.
+       */
+      async function fetchGitHubIssueCommentsByTitle(owner, repo) {
+        const map = new Map();
+        const headers = {
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+        };
+        const maxPages = 10;
+        for (let page = 1; page <= maxPages; page++) {
+          const url = new URL(
+            `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`
+          );
+          url.searchParams.set("state", "all");
+          url.searchParams.set("per_page", "100");
+          url.searchParams.set("page", String(page));
+          const res = await fetch(url.toString(), { headers });
+          if (!res.ok) {
+            console.warn("GitHub issues API:", res.status, await res.text());
+            break;
+          }
+          const issues = await res.json();
+          for (const issue of issues) {
+            if (issue.pull_request) continue;
+            if (issue.title) map.set(issue.title, issue.comments);
+          }
+          if (issues.length < 100) break;
+        }
+        return map;
+      }
+
       // Function to fetch and display posts
       async function loadPosts() {
         try {
@@ -177,6 +235,19 @@
           const meta = await metaResponse.json();
           const postsContainer = document.getElementById("posts");
           const posts = meta.posts.reverse();
+
+          let commentsByTitle = null;
+          if (isBlogGithubConfigured()) {
+            try {
+              commentsByTitle = await fetchGitHubIssueCommentsByTitle(
+                BLOG_GITHUB_OWNER,
+                BLOG_GITHUB_REPO
+              );
+            } catch (e) {
+              console.warn("Could not load comment counts:", e);
+            }
+          }
+
           for (const postFile of posts) {
             try {
               const postResponse = await fetch(`./posts/${postFile}`, {
@@ -203,6 +274,15 @@
                 "preview-image"
               );
 
+              let commentsLine = "";
+              if (commentsByTitle) {
+                const pageUrl = postPageUrlForUtterances(postFile);
+                const n = commentsByTitle.has(pageUrl)
+                  ? commentsByTitle.get(pageUrl)
+                  : 0;
+                commentsLine = `<div class="post-comments" aria-label="Number of comments">${n === 1 ? "1 comment" : `${n} comments`}</div>`;
+              }
+
               postElement.innerHTML = `
                 ${imageHtml}
                 <div class="post-content">
@@ -210,6 +290,7 @@
                   <div class="post-date">${new Date(
                     post.createdAt
                   ).toLocaleDateString()}</div>
+                  ${commentsLine}
                   <p class="post-excerpt">${processedContent}</p>
                 </div>
               `;
