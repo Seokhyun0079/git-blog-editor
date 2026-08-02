@@ -18,13 +18,32 @@ GitHub를 블로그로 활용하는 **정적** 에디터입니다. Express 서�
 
 ## 사용 방법 (GitHub Pages)
 
-1. 이 저장소 Settings → Pages에서 Source를 **GitHub Actions**로 설정합니다. `main` 푸시 시 `.github/workflows/deploy-pages.yml`이 에디터를 배포합니다.
-2. 배포된 에디터 URL을 엽니다.
-3. **Personal Access Token**, **owner**, **repo**(블로그 콘텐츠 저장소)를 입력하고 Save합니다.
-   - [Fine-grained PAT](https://github.com/settings/tokens?type=beta) 권장: 해당 블로그 리포의 **Contents: Read and write**만.
-4. Save 시 블로그 템플릿(`index.html`, `post.html` 등)이 콘텐츠 리포에 동기화됩니다.
+공개 저장소 기준 Pages / Actions 사용은 **무료**입니다. Settings 하단의 “Start free 30 days”는 유료 플랜 체험 안내라서 Pages와 무관합니다. 누르지 않아도 됩니다.
 
-로컬에서만 쓰려면:
+### 1) Pages Source 설정
+
+1. 이 저장소 → **Settings** → 왼쪽 **Pages**
+2. **Build and deployment** → **Source**에서 **GitHub Actions** 선택
+3. Jekyll / Static HTML 같은 **스타터 워크플로 선택 화면이 뜨면 만들지 말고 닫기**  
+   (이미 [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml)이 있음)
+
+### 2) 배포 실행
+
+- 기본 브랜치(`main`)에 푸시하면 워크플로가 자동 실행됩니다.
+- 또는 **Actions** 탭 → **Deploy editor to GitHub Pages** → **Run workflow**
+
+성공하면 에디터 주소:
+
+`https://seokhyun0079.github.io/git-blog-editor/`
+
+### 3) 에디터 첫 설정
+
+1. 위 에디터 URL을 연다.
+2. **Personal Access Token**, **owner**, **repo**(블로그 콘텐츠 저장소)를 입력하고 Save.
+   - [Fine-grained PAT](https://github.com/settings/tokens?type=beta) 권장: 해당 블로그 리포 **Contents: Read and write**만.
+3. Save 시 블로그 템플릿(`index.html`, `post.html` 등)이 콘텐츠 리포에 동기화됩니다.
+
+### 로컬 실행
 
 ```bash
 cd client
@@ -32,12 +51,14 @@ npm install --legacy-peer-deps
 npm start
 ```
 
-수동 Pages 배포:
+### 수동 배포 (로컬에서 gh-pages 브랜치로)
 
 ```bash
 cd client
 npm run deploy
 ```
+
+이 방식을 쓰면 Pages Source를 **Deploy from a branch** → `gh-pages` / `/(root)` 로 바꿔도 됩니다.
 
 ### 보안 주의
 
@@ -53,7 +74,7 @@ npm run deploy
 ## 기술 스택
 
 - Frontend: React (CRA), Octokit (browser)
-- Deploy: GitHub Pages
+- Deploy: GitHub Pages (Actions 또는 gh-pages 브랜치)
 - Blog comments: Utterances
 - Optional legacy backend: Node.js / Express (`server/`)
 
@@ -81,10 +102,12 @@ GitHub をブログとして活用する**静的**エディターです。Expres
 
 ## 使い方（GitHub Pages）
 
-1. このリポジトリの Settings → Pages で Source を **GitHub Actions** に設定します。
-2. デプロイされたエディター URL を開きます。
-3. **PAT**・**owner**・**repo**（ブログ用リポジトリ）を入力して Save。
-4. Save 時にブログ用テンプレートが同期されます。
+公開リポジトリなら Pages / Actions は通常無料です。Settings 下部の「Start free 30 days」は有料プランの案内で、Pages には不要です。
+
+1. **Settings → Pages → Source → GitHub Actions**
+2. Jekyll / Static HTML のスターターが出たら **追加せず閉じる**（既存の `deploy-pages.yml` を使う）
+3. `main` に push、または Actions から **Run workflow**
+4. `https://seokhyun0079.github.io/git-blog-editor/` を開き、PAT / owner / repo を Save
 
 ローカル:
 
