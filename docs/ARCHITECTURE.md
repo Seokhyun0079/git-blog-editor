@@ -11,7 +11,7 @@ The React app is **only the editor**. Readers only load **static HTML/JS** from 
 
 ## Auth (no Express required)
 
-Settings UI stores `token`, `owner`, `repo`, `branch` in `localStorage` (`git-blog-editor:config`). Prefer a **fine-grained PAT** with Contents write on the blog repo only. The token never leaves the author’s browser except for GitHub API calls.
+Settings UI stores `token`, `owner`, `repo`, `branch` in `localStorage` (`git-blog-editor:config`). Prefer a **fine-grained PAT** with Contents write on the blog repo only. The token never leaves the author’s browser except for GitHub API calls. Settings copy is localized (ko / en / ja) from the browser language (`client/src/i18n/settings.ts`).
 
 Core modules: `client/src/github/` (`config`, `posts`, `files`, `meta`, `cleanup`, `templates`).
 

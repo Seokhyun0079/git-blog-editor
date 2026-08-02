@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Box,
   Button,
@@ -9,6 +9,9 @@ import {
   Alert,
   Stack,
   Link,
+  List,
+  ListItem,
+  ListItemText,
 } from "@mui/material";
 import {
   getConfig,
@@ -20,6 +23,7 @@ import {
 } from "../github";
 import { useLoadingContext } from "../context/LoadingContext";
 import { useToastContext, TOAST_TYPES } from "../context/ToastContext";
+import { detectLocale, getSettingsCopy } from "../i18n/settings";
 
 type SettingsPageProps = {
   onConfigured: () => void;
@@ -35,6 +39,7 @@ const emptyForm = (): GitHubConfig => ({
 });
 
 function SettingsPage({ onConfigured, allowSkip, onClose }: SettingsPageProps) {
+  const t = useMemo(() => getSettingsCopy(detectLocale()), []);
   const existing = getConfig();
   const [form, setForm] = useState<GitHubConfig>(existing ?? emptyForm());
   const [testResult, setTestResult] = useState<string | null>(null);
@@ -54,16 +59,16 @@ function SettingsPage({ onConfigured, allowSkip, onClose }: SettingsPageProps) {
     });
     if ((result as any).ok) {
       setTestOk(true);
-      setTestResult(`Connected to ${(result as any).fullName}`);
+      setTestResult(t.connectedTo((result as any).fullName));
     } else {
       setTestOk(false);
-      setTestResult((result as any).error || "Connection failed");
+      setTestResult((result as any).error || t.connectionFailed);
     }
   };
 
   const handleSave = async () => {
     if (!form.token.trim() || !form.owner.trim() || !form.repo.trim()) {
-      showToast("Token, owner, and repo are required", TOAST_TYPES.ERROR);
+      showToast(t.requiredFields, TOAST_TYPES.ERROR);
       return;
     }
 
@@ -84,10 +89,10 @@ function SettingsPage({ onConfigured, allowSkip, onClose }: SettingsPageProps) {
         return { ok: true };
       });
 
-      showToast("Settings saved and templates synced", TOAST_TYPES.SUCCESS);
+      showToast(t.saveSuccess, TOAST_TYPES.SUCCESS);
       onConfigured();
     } catch (error: any) {
-      showToast(error?.message || "Failed to save settings", TOAST_TYPES.ERROR);
+      showToast(error?.message || t.saveFailed, TOAST_TYPES.ERROR);
     }
   };
 
@@ -104,84 +109,113 @@ function SettingsPage({ onConfigured, allowSkip, onClose }: SettingsPageProps) {
         await syncTemplates();
         return { ok: true };
       });
-      showToast("Templates synced", TOAST_TYPES.SUCCESS);
+      showToast(t.syncSuccess, TOAST_TYPES.SUCCESS);
     } catch (error: any) {
-      showToast(error?.message || "Template sync failed", TOAST_TYPES.ERROR);
+      showToast(error?.message || t.syncFailed, TOAST_TYPES.ERROR);
     }
   };
 
   return (
-    <Container maxWidth="sm" sx={{ mt: 6, mb: 6 }}>
+    <Container maxWidth="sm" sx={{ mt: 4, mb: 6 }}>
       <Paper sx={{ p: 3 }}>
         <Typography variant="h5" gutterBottom>
-          GitHub Settings
+          {t.title}
+        </Typography>
+        <Typography variant="body1" sx={{ mb: 2 }}>
+          {t.whatIsThis}
+        </Typography>
+
+        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+          {t.howItWorksTitle}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          This editor runs entirely in the browser. Enter a Personal Access
-          Token with write access to your blog repository. Prefer a
-          fine-grained token limited to Contents write on that repo only. The
-          token is stored only in this browser&apos;s localStorage.
+          {t.howItWorksBody}
         </Typography>
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          Do not use a shared or public computer. Anyone with access to this
-          browser can use your token.
+
+        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+          {t.privacyTitle}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          {t.privacyBody}
+        </Typography>
+
+        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+          {t.stepsTitle}
+        </Typography>
+        <List dense sx={{ mb: 2, py: 0 }}>
+          {t.steps.map((step, index) => (
+            <ListItem key={index} sx={{ py: 0.25, alignItems: "flex-start" }}>
+              <ListItemText
+                primary={`${index + 1}. ${step}`}
+                primaryTypographyProps={{ variant: "body2", color: "text.secondary" }}
+              />
+            </ListItem>
+          ))}
+        </List>
+
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {t.warning}
         </Alert>
+
         <Stack spacing={2}>
           <TextField
-            label="Personal Access Token"
+            label={t.tokenLabel}
             type="password"
             value={form.token}
             onChange={(e) => updateField("token", e.target.value)}
             fullWidth
             autoComplete="off"
             helperText={
-              <Link
-                href="https://github.com/settings/tokens?type=beta"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Create a fine-grained PAT
-              </Link>
+              <>
+                {t.tokenHelp}{" "}
+                <Link
+                  href="https://github.com/settings/tokens?type=beta"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {t.tokenLink}
+                </Link>
+              </>
             }
           />
           <TextField
-            label="Owner"
+            label={t.ownerLabel}
             value={form.owner}
             onChange={(e) => updateField("owner", e.target.value)}
             fullWidth
-            placeholder="your-github-username"
+            placeholder={t.ownerPlaceholder}
           />
           <TextField
-            label="Repository"
+            label={t.repoLabel}
             value={form.repo}
             onChange={(e) => updateField("repo", e.target.value)}
             fullWidth
-            placeholder="git_blog"
+            placeholder={t.repoPlaceholder}
           />
           <TextField
-            label="Branch"
+            label={t.branchLabel}
             value={form.branch}
             onChange={(e) => updateField("branch", e.target.value)}
             fullWidth
-            placeholder="main"
+            placeholder={t.branchPlaceholder}
           />
           {testResult && (
             <Alert severity={testOk ? "success" : "error"}>{testResult}</Alert>
           )}
           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
             <Button variant="outlined" onClick={handleTest}>
-              Test connection
+              {t.testConnection}
             </Button>
             {existing && (
               <Button variant="outlined" onClick={handleSyncOnly}>
-                Sync templates
+                {t.syncTemplates}
               </Button>
             )}
             <Button variant="contained" onClick={handleSave}>
-              Save &amp; continue
+              {t.saveContinue}
             </Button>
             {allowSkip && onClose && (
-              <Button onClick={onClose}>Cancel</Button>
+              <Button onClick={onClose}>{t.cancel}</Button>
             )}
           </Box>
         </Stack>
