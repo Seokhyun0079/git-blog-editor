@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Post Detail - GitHub Blog</title>
+    <style>
+      :root {
+        --primary-color: #2d3436;
+        --secondary-color: #636e72;
+        --accent-color: #0984e3;
+        --background-color: #f5f6fa;
+        --card-background: #ffffff;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+        line-height: 1.6;
+        margin: 0;
+        padding: 0;
+        background-color: var(--background-color);
+        color: var(--primary-color);
+      }
+
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 2rem;
+      }
+
+      header {
+        background: linear-gradient(135deg, var(--accent-color), #74b9ff);
+        color: white;
+        padding: 2rem 0;
+        margin-bottom: 2rem;
+      }
+
+      .back-link {
+        display: inline-flex;
+        align-items: center;
+        color: white;
+        text-decoration: none;
+        font-weight: 500;
+        margin-bottom: 1rem;
+        transition: opacity 0.3s ease;
+      }
+
+      .back-link:hover {
+        opacity: 0.8;
+      }
+
+      .back-link::before {
+        content: "←";
+        margin-right: 0.5rem;
+      }
+
+      .post {
+        background: var(--card-background);
+        border-radius: 12px;
+        padding: 2rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      .post-title {
+        margin: 0 0 1rem 0;
+        color: var(--primary-color);
+        font-size: 2.5rem;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+
+      .post-date {
+        color: var(--secondary-color);
+        font-size: 1rem;
+        margin-bottom: 2rem;
+      }
+
+      .post-content {
+        font-size: 1.1rem;
+        line-height: 1.8;
+        color: var(--primary-color);
+        white-space: pre-line;
+      }
+
+      .post-content p {
+        margin-bottom: 1.5rem;
+      }
+
+      .image-gallery {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1.5rem;
+        margin: 2rem 0;
+      }
+
+      .gallery-image {
+        width: 100%;
+        height: 250px;
+        object-fit: cover;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+      }
+
+      .gallery-image:hover {
+        transform: scale(1.02);
+        box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
+      }
+
+      @media (max-width: 768px) {
+        .container {
+          padding: 1rem;
+        }
+
+        .post {
+          padding: 1.5rem;
+        }
+
+        .post-title {
+          font-size: 2rem;
+        }
+
+        .image-gallery {
+          grid-template-columns: 1fr;
+        }
+      }
+      .image-in-post {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.3s ease;
+      }
+
+      .comments-section {
+        margin-top: 2rem;
+        background: var(--card-background);
+        border-radius: 12px;
+        padding: 2rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      .comments-heading {
+        margin: 0 0 1rem 0;
+        font-size: 1.35rem;
+        font-weight: 600;
+        color: var(--primary-color);
+      }
+
+      .utterances {
+        max-width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      (function () {
+        try {
+          var u = new URL(window.location.href);
+          if (u.searchParams.has("time")) {
+            u.searchParams.delete("time");
+            history.replaceState(null, "", u.toString());
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <header>
+      <div class="container">
+        <a href="./" class="back-link">Back to Posts</a>
+      </div>
+    </header>
+    <div class="container">
+      <article id="post-content" class="post"></article>
+      <section class="comments-section" aria-label="Comments">
+        <h2 class="comments-heading">Comments</h2>
+        <!--
+          Utterances: comments are stored as GitHub Issues (no blog server).
+          Enable Issues on this repo and install: https://github.com/apps/utterances
+          Placeholders are filled when the editor syncs templates (GITHUB_OWNER / GITHUB_REPO).
+        -->
+        <script
+          src="https://utteranc.es/client.js"
+          repo="__GITHUB_OWNER__/__GITHUB_REPO__"
+          issue-term="url"
+          theme="github-light"
+          crossorigin="anonymous"
+          async
+        ></script>
+      </section>
+    </div>
+    <script src="./utills.js"></script>
+    <script>
+      async function loadPost() {
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          const postId = urlParams.get("id");
+
+          if (!postId) {
+            throw new Error("Post ID not found");
+          }
+
+          const response = await fetch(`./posts/${postId}`, {
+            cache: "no-store",
+          });
+          const post = await response.json();
+
+          document.title = post.title;
+
+          const postContent = document.getElementById("post-content");
+
+          postContent.innerHTML = `
+            <h1 class="post-title">${post.title}</h1>
+            <div class="post-date">${new Date(
+              post.createdAt
+            ).toLocaleDateString()}</div>
+          `;
+
+          // 첨부 파일 갤러리 (기존 files)
+          if (post.files && post.files.length > 0) {
+            const gallery = document.createElement("div");
+            gallery.className = "image-gallery";
+
+            post.files.forEach((file) => {
+              const img = document.createElement("img");
+              img.src = `./images/${file.name}`;
+              img.alt = file.name;
+              img.className = "gallery-image";
+              gallery.appendChild(img);
+            });
+
+            postContent.appendChild(gallery);
+          }
+
+          // 콘텐츠 렌더링 (UUID 태그를 실제 미디어로 변환)
+          const content = document.createElement("div");
+          content.className = "post-content";
+
+          // UUID 태그를 실제 미디어로 변환
+          let processedContent = post.content;
+
+          console.log("processedContent", processedContent);
+          // contentFiles가 있으면 UUID를 실제 파일 경로로 매핑
+          if (post.contentFiles && post.contentFiles.length > 0) {
+            const uuidToFileMap = {};
+            post.contentFiles.forEach((file) => {
+              if (file.uuid) {
+                uuidToFileMap[file.uuid] = file;
+              }
+            });
+
+            // img 태그 변환
+            processedContent = addClassToImages(
+              processedContent,
+              "image-in-post"
+            );
+
+            // video 태그 변환
+            processedContent = processedContent.replace(
+              /<video src="([^"]+)"/g,
+              (match, uuid) => {
+                const file = uuidToFileMap[uuid];
+                if (file && file.name) {
+                  return `<video src="./images/${file.name}" controls style="max-width: 100%; height: auto; border-radius: 8px; margin: 1rem 0;">`;
+                }
+                return match; // 매핑되지 않은 경우 원본 유지
+              }
+            );
+          }
+
+          processedContent = processedContent.replace(
+            /<youtube src="([^"]+)"[^>]*>/g,
+            (match, youtubeVideoUrl) => {
+              console.log("youtubeVideoUrl", youtubeVideoUrl);
+              console.log("match", match);
+              return `<iframe src="${youtubeVideoUrl}" frameborder="0" allowfullscreen title="${youtubeVideoUrl}" width="100%" height="500px"></iframe>`;
+            }
+          );
+
+          content.innerHTML = processedContent.replace(/\n/g, "<br>");
+          console.log("processedContent", processedContent);
+          postContent.appendChild(content);
+        } catch (error) {
+          console.error("Error loading post:", error);
+          document.getElementById("post-content").innerHTML = `
+            <h1>Error</h1>
+            <p>Failed to load post. Please try again later.</p>
+          `;
+        }
+      }
+
+      window.addEventListener("load", loadPost);
+    </script>
+  </body>
+</html>
