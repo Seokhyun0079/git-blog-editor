@@ -22,8 +22,7 @@ import YoutubePreview from "./edit/YotubePreview";
 import { PostEditorProps } from "./Props";
 import { convertFileToPostFile } from "./FileAdapter";
 import { TOAST_TYPES, useToastContext } from "../context/ToastContext";
-
-const requestHeaders = {};
+import { createPost, updatePost, type PostMutationResult } from "../github";
 
 const fileProcess = (
   file: File,
@@ -51,7 +50,7 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
   const [youtubeVideoUrls, setYoutubeVideoUrls] = useState<string[]>([]);
   const [youtubeDialogOpen, setYoutubeDialogOpen] = useState<boolean>(false);
   const { onPostCreated } = usePostPageContext();
-  const { post, put } = useLoadingContext();
+  const { loadingProcess } = useLoadingContext();
   const { showToast } = useToastContext();
 
   // Tiptap Editor
@@ -192,6 +191,8 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
       const files = Array.from(event.dataTransfer.files);
       files.forEach((file) => fileProcess(file, setContentMedia));
     },
+    // setContentMedia is stable enough for drop handling; avoid re-wrapping each render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [editor]
   );
 
@@ -236,9 +237,6 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
     setError("");
 
     try {
-      const formData = new FormData();
-      formData.append("title", title);
-
       // Get HTML from Tiptap and convert to legacy format
       const tiptapHtml = editor.getHTML();
 
@@ -445,28 +443,25 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
       );
 
       const legacyContent = convertTiptapToLegacyFormat(htmlWithUuids);
-      formData.append("content", legacyContent);
 
-      // Send files with UUID as contentFiles (including newly converted blob URLs)
-      formData.append("contentFiles", JSON.stringify(finalContentFiles));
-      files.forEach((file) => {
-        formData.append("files", file);
-      });
-      let response;
-
-      const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:5000";
-
-      if (selectedPost) {
-        formData.append("id", selectedPost.id);
-        formData.append("filesToDelete", JSON.stringify(deletedFiles));
-        response = await put(
-          `${apiUrl}/api/posts/${selectedPost.id}`,
-          formData,
-          requestHeaders
-        );
-      } else {
-        response = await post(`${apiUrl}/api/posts`, formData, requestHeaders);
-      }
+      const response = (await loadingProcess(async () => {
+        if (selectedPost) {
+          return updatePost({
+            id: selectedPost.id,
+            title,
+            content: legacyContent,
+            files,
+            contentFiles: finalContentFiles,
+            filesToDelete: deletedFiles,
+          });
+        }
+        return createPost({
+          title,
+          content: legacyContent,
+          files,
+          contentFiles: finalContentFiles,
+        });
+      })) as PostMutationResult;
 
       if (response.success) {
         // Update editor: replace UUID src with GitHub URLs for uploaded files
@@ -592,9 +587,7 @@ const PostEditor = ({ show, selectedPost }: PostEditorProps) => {
         onPostCreated();
         showToast("Post registered successfully", TOAST_TYPES.SUCCESS);
       } else {
-        throw new Error(
-          response.error || "An error occurred while creating the post."
-        );
+        throw new Error("An error occurred while creating the post.");
       }
     } catch (error: any) {
       setError(

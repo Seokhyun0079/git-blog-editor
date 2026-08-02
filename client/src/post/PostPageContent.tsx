@@ -9,13 +9,18 @@ import { usePostPageContext } from "../context/PostPageContext";
 import { Post } from "../type/Post";
 import { PostFile } from "../type/File";
 import { processPost } from "./FileAdapter";
+import { listPosts } from "../github";
 
-function PostPageContent() {
+type PostPageContentProps = {
+  onOpenSettings: () => void;
+};
+
+function PostPageContent({ onOpenSettings }: PostPageContentProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [showEditor, setShowEditor] = useState<boolean>(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const showEditorRef = useRef(showEditor);
-  const { get } = useLoadingContext();
+  const { loadingProcess } = useLoadingContext();
   const { setOnPostCreated, setOnPostDeleted, setOnPostClicked } =
     usePostPageContext();
   // Mount: fetch posts and setup back button listener
@@ -50,9 +55,10 @@ function PostPageContent() {
   };
 
   const fetchPosts = async (): Promise<void> => {
-    const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:5000";
-    const response = await get(`${apiUrl}/api/posts`);
-    console.log("response", response);
+    const response = (await loadingProcess(async () => listPosts())) as {
+      success: true;
+      data: Post[];
+    };
     const sort = (a: Post, b: Post) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     setPosts(response.data.sort(sort).map(processPost));
@@ -94,7 +100,11 @@ function PostPageContent() {
 
   return (
     <Box sx={{ flexGrow: 1 }}>
-      <Header showEditor={showEditor} clickButton={HeaderButtonClick} />
+      <Header
+        showEditor={showEditor}
+        clickButton={HeaderButtonClick}
+        onOpenSettings={onOpenSettings}
+      />
       <Container maxWidth="md" sx={{ mt: 4 }}>
         <PostEditor show={showEditor} selectedPost={selectedPost} />
         <PostList show={!showEditor} posts={posts} />

@@ -1,173 +1,103 @@
 # GitHub Blog Editor
 
-GitHub를 블로그로 활용하는 에디터 프로젝트입니다.
+GitHub를 블로그로 활용하는 **정적** 에디터입니다. Express 서버 없이 브라우저에서 GitHub API를 호출하며, GitHub Pages에 무료로 배포할 수 있습니다.
 
 ## 데모
 
 - 블로그 URL: [https://seokhyun0079.github.io/git_blog/](https://seokhyun0079.github.io/git_blog/)
 - 블로그 리포지토리: [https://github.com/Seokhyun0079/git_blog](https://github.com/Seokhyun0079/git_blog)
+- 에디터 (Pages): [https://seokhyun0079.github.io/git-blog-editor/](https://seokhyun0079.github.io/git-blog-editor/)
 
 ## 기능
 
-- GitHub 저장소에 블로그 포스트 작성
-- 제목과 내용 작성
-- 파일 첨부 기능
+- GitHub 저장소에 블로그 포스트 작성 / 수정 / 삭제
+- 제목과 내용 작성, 파일·미디어 첨부
 - JSON 형식으로 포스트 저장
-- 블로그 글 페이지 댓글(Utterances; GitHub Issues 기반)
+- 블로그 글 페이지 댓글 (Utterances; GitHub Issues 기반)
+- 설정 화면에서 PAT 입력 (localStorage) — 서버 불필요
+
+## 사용 방법 (GitHub Pages)
+
+1. 이 저장소 Settings → Pages에서 Source를 **GitHub Actions**로 설정합니다. `main` 푸시 시 `.github/workflows/deploy-pages.yml`이 에디터를 배포합니다.
+2. 배포된 에디터 URL을 엽니다.
+3. **Personal Access Token**, **owner**, **repo**(블로그 콘텐츠 저장소)를 입력하고 Save합니다.
+   - [Fine-grained PAT](https://github.com/settings/tokens?type=beta) 권장: 해당 블로그 리포의 **Contents: Read and write**만.
+4. Save 시 블로그 템플릿(`index.html`, `post.html` 등)이 콘텐츠 리포에 동기화됩니다.
+
+로컬에서만 쓰려면:
+
+```bash
+cd client
+npm install --legacy-peer-deps
+npm start
+```
+
+수동 Pages 배포:
+
+```bash
+cd client
+npm run deploy
+```
+
+### 보안 주의
+
+- PAT는 이 브라우저의 localStorage에만 저장됩니다. **공유·공용 PC에서는 사용하지 마세요.**
+- 토큰 권한은 블로그 리포 쓰기로 최소화하세요.
 
 ### 블로그 댓글을 쓰려면
 
-블로그에 올라가는 `post.html` 템플릿은 **Utterances**로 댓글을 붙입니다. 댓글이 **GitHub Issues**에 달리므로, 블로그로 사용하는 저장소에서 **Issues 기능을 켜야 합니다.**
-
-1. 해당 저장소 **Settings → General → Features**에서 **Issues**를 활성화합니다.
-2. [Utterances GitHub App](https://github.com/apps/utterances)을 리포지토리에 설치해주세요.
-3. 에디터 서버를 실행해 템플릿이 블로그 저장소에 동기화되면 `repo` 등이 `.env`의 `GITHUB_OWNER` / `GITHUB_REPO`에 맞게 채워집니다.
-
-## 설치 방법
-
-1. 저장소 클론
-
-```bash
-git clone [repository-url]
-cd git-blog-editor
-```
-
-2. 의존성 설치
-
-```bash
-npm install
-```
-
-3. 환경 변수 설정
-   `.env` 파일을 프로젝트 루트에 생성하고 다음 내용을 입력하세요:
-
-```
-PORT=5000
-GITHUB_TOKEN=your_github_token_here
-GITHUB_OWNER=your_github_username
-GITHUB_REPO=your_repository_name
-```
-
-## 실행 방법
-
-개발 서버 실행:
-
-```bash
-npm run dev
-```
-
-프론트엔드와 백엔드 동시 실행:
-
-```bash
-npm run dev:full
-```
-
-## API 엔드포인트
-
-### 포스트 작성
-
-- POST `/api/posts`
-- Content-Type: multipart/form-data
-- Body:
-  - title: 포스트 제목
-  - content: 포스트 내용
-  - files: 첨부 파일 (선택사항)
-
-### 포스트 목록 조회
-
-- GET `/api/posts`
+1. 블로그 저장소 Settings → General → Features에서 **Issues** 활성화
+2. [Utterances GitHub App](https://github.com/apps/utterances) 설치
+3. 에디터 Settings에서 템플릿 동기화
 
 ## 기술 스택
 
-- Backend: Node.js, Express
-- Frontend: React
-- GitHub API: Octokit
-- File Upload: Multer
+- Frontend: React (CRA), Octokit (browser)
+- Deploy: GitHub Pages
+- Blog comments: Utterances
+- Optional legacy backend: Node.js / Express (`server/`)
+
+자세한 구조는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)를 참고하세요.
 
 ---
 
 # GitHub Blog Editor
 
-GitHub をブログとして活用するエディタープロジェクトです。
+GitHub をブログとして活用する**静的**エディターです。Express サーバーなしでブラウザから GitHub API を呼び出し、GitHub Pages に無料デプロイできます。
 
 ## デモ
 
 - ブログ URL: [https://seokhyun0079.github.io/git_blog/](https://seokhyun0079.github.io/git_blog/)
 - ブログリポジトリ: [https://github.com/Seokhyun0079/git_blog](https://github.com/Seokhyun0079/git_blog)
+- エディター (Pages): [https://seokhyun0079.github.io/git-blog-editor/](https://seokhyun0079.github.io/git-blog-editor/)
 
 ## 機能
 
-- GitHub リポジトリへのブログ投稿
-- タイトルと本文の作成
-- ファイル添付機能
+- GitHub リポジトリへの投稿作成 / 更新 / 削除
+- タイトル・本文・ファイル添付
 - JSON 形式での投稿保存
-- ブログ記事ページのコメント（Utterances、GitHub Issues ベース）
+- Utterances コメント（GitHub Issues）
+- 設定画面で PAT を入力（localStorage）— サーバー不要
 
-### ブログでコメントを使うには
+## 使い方（GitHub Pages）
 
-ブログ用の `post.html` テンプレートは **Utterances** でコメントを表示します。コメントは **GitHub Issues** に紐づくため、ブログとして使うリポジトリで **Issues 機能を有効**にする必要があります。
+1. このリポジトリの Settings → Pages で Source を **GitHub Actions** に設定します。
+2. デプロイされたエディター URL を開きます。
+3. **PAT**・**owner**・**repo**（ブログ用リポジトリ）を入力して Save。
+4. Save 時にブログ用テンプレートが同期されます。
 
-1. リポジトリの **Settings → General → Features** で **Issues** を有効にします。
-2. [Utterances GitHub App](https://github.com/apps/utterances) をそのリポジトリにインストールします。
-3. エディタのサーバーを起動してテンプレートをブログ用リポジトリに同期すると、`repo` などが `.env` の `GITHUB_OWNER` / `GITHUB_REPO` に合わせて埋め込まれます。
-
-## インストール方法
-
-1. リポジトリのクローン
+ローカル:
 
 ```bash
-git clone [repository-url]
-cd git-blog-editor
+cd client
+npm install --legacy-peer-deps
+npm start
 ```
-
-2. 依存関係のインストール
-
-```bash
-npm install
-```
-
-3. 環境変数の設定
-   プロジェクトのルートに`.env`ファイルを作成し、以下の内容を入力してください：
-
-```
-PORT=5000
-GITHUB_TOKEN=your_github_token_here
-GITHUB_OWNER=your_github_username
-GITHUB_REPO=your_repository_name
-```
-
-## 実行方法
-
-開発サーバーの起動：
-
-```bash
-npm run dev
-```
-
-フロントエンドとバックエンドの同時起動：
-
-```bash
-npm run dev:full
-```
-
-## API エンドポイント
-
-### 投稿作成
-
-- POST `/api/posts`
-- Content-Type: multipart/form-data
-- Body:
-  - title: 投稿タイトル
-  - content: 投稿内容
-  - files: 添付ファイル（オプション）
-
-### 投稿一覧の取得
-
-- GET `/api/posts`
 
 ## 技術スタック
 
-- バックエンド: Node.js, Express
-- フロントエンド: React
-- GitHub API: Octokit
-- ファイルアップロード: Multer
+- Frontend: React (CRA), Octokit (browser)
+- Deploy: GitHub Pages
+- Optional legacy: Node.js / Express (`server/`)
+
+詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) を参照してください。

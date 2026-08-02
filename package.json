@@ -11,7 +11,9 @@
     "build": "tsc",
     "client": "cd client && npm start",
     "dev:full": "concurrently \"npm run dev\" \"npm run client\"",
-    "dev:full:ts": "concurrently \"npm run dev:ts\" \"npm run client\""
+    "dev:full:ts": "concurrently \"npm run dev:ts\" \"npm run client\"",
+    "client:build": "cd client && npm run build",
+    "client:deploy": "cd client && npm run deploy"
   },
   "dependencies": {
     "cors": "^2.8.5",

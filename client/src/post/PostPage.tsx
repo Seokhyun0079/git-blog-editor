@@ -1,9 +1,14 @@
 import PostPageContent from "./PostPageContent";
 import { PostProvider } from "../context/PostPageContext";
-const PostPage = () => {
+
+type PostPageProps = {
+  onOpenSettings: () => void;
+};
+
+const PostPage = ({ onOpenSettings }: PostPageProps) => {
   return (
     <PostProvider>
-      <PostPageContent />
+      <PostPageContent onOpenSettings={onOpenSettings} />
     </PostProvider>
   );
 };
